@@ -1,0 +1,53 @@
+---
+description: Prevent unnecessary architecture and feature expansion in the weekend interview project.
+alwaysApply: true
+---
+
+# Scope Control Rules
+
+IssueFlow is intentionally a compact local full-stack interview demonstration.
+
+Prefer a finished, polished, explainable application over additional infrastructure or speculative architecture.
+
+## Do Not Add Unless Explicitly Requested
+
+- Microservices
+- Kafka
+- Redis
+- Docker orchestration
+- Kubernetes
+- AWS infrastructure
+- OAuth2
+- JWT authentication
+- User registration
+- WebSockets
+- Event sourcing
+- CQRS
+- Elasticsearch
+- Redux
+- LLM integration
+- Message queues
+- Distributed caching
+- Production observability stacks
+- Complex plugin architectures
+
+## Design Discipline
+
+- Do not create abstractions solely for possible future requirements.
+- Do not redesign working architecture without a concrete requirement.
+- Do not introduce libraries when a small amount of clear application code is sufficient.
+- Do not convert the project into a microservice architecture.
+- Do not add authentication simply because the application has users or assignees.
+- Do not add deployment infrastructure unless explicitly requested.
+- Prefer completing, testing, documenting, and polishing existing functionality over adding features.
+
+## Scope Test
+
+Before introducing a new dependency, layer, service, framework, or infrastructure component, ask:
+
+1. Is it required by `ISSUEFLOW_CURSOR_REQUIREMENTS.md`?
+2. Does the current implementation genuinely need it?
+3. Can the requirement be satisfied cleanly without it?
+4. Will it make the interview demo easier to understand?
+
+If the answer does not clearly justify the addition, do not add it.

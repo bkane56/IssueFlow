@@ -1,0 +1,80 @@
+---
+description: React and TypeScript frontend implementation rules.
+globs:
+  - "frontend/src/**/*.ts"
+  - "frontend/src/**/*.tsx"
+  - "frontend/package.json"
+  - "frontend/vite.config.*"
+alwaysApply: false
+---
+
+# React Frontend Rules
+
+## Package Management
+
+- Use Yarn only.
+- Use commands such as `yarn`, `yarn add`, `yarn dev`, `yarn test`, and `yarn build`.
+- Do not use npm, npx, pnpm, or Bun.
+- Do not create `package-lock.json`.
+
+## Core Stack
+
+- Use React.
+- Use TypeScript.
+- Use Vite.
+- Use React Router for routing.
+
+## Suggested Structure
+
+```text
+frontend/src/
+├── api/
+├── components/
+├── constants/
+├── hooks/
+├── layouts/
+├── pages/
+├── types/
+├── utils/
+├── App.tsx
+└── main.tsx
+```
+
+## Component Design
+
+- Keep components focused on a clear responsibility.
+- Avoid oversized components.
+- Extract reusable UI behavior when reuse is real, not speculative.
+- Do not place complex business logic directly in JSX.
+- Keep server communication outside presentation-only components.
+- Do not duplicate API models across multiple files without reason.
+
+## State Management
+
+- Do not introduce Redux unless application state complexity clearly requires it.
+- Prefer local component state, lifted state, hooks, and simple server-state patterns first.
+- Avoid unnecessary global state.
+- Do not duplicate server state merely to create another client-side source of truth.
+
+## API Usage
+
+- Centralize backend calls under `frontend/src/api/`.
+- Keep API base URLs configurable through environment variables where appropriate.
+- Use typed request and response models.
+- Handle loading, success, empty, and error states.
+
+## Forms
+
+- Provide useful client-side validation for user experience.
+- Do not treat frontend validation as a replacement for backend validation.
+- Surface backend validation errors clearly.
+
+## UI Quality
+
+- Keep the UI professional and suitable for an interview demonstration.
+- Use visual badges for priority, severity, and status where useful.
+- Do not use color as the only indication of meaning.
+- Avoid excessive animation and visual clutter.
+- Do not use emojis.
+- Do not use em dash characters.
+- The application should work cleanly on a normal laptop display.

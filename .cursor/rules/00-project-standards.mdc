@@ -1,0 +1,64 @@
+---
+description: Core IssueFlow project standards that apply to all work in this repository.
+alwaysApply: true
+---
+
+# IssueFlow Project Standards
+
+## Technology
+
+- Java version is 17.
+- Backend framework is Spring Boot.
+- Backend build and dependency management uses Maven only.
+- Prefer the Maven Wrapper with `./mvnw`.
+- Never introduce Gradle, Gradle Wrapper, or Ant.
+- Frontend uses React, TypeScript, and Vite.
+- Frontend package management uses Yarn only.
+- Never use npm, npx, pnpm, or Bun.
+- Never create or commit `package-lock.json`.
+- The database is SQLite unless requirements explicitly change.
+
+## Engineering Standards
+
+- Read `ISSUEFLOW_CURSOR_REQUIREMENTS.md` before implementing non-trivial project requirements.
+- Prefer the smallest maintainable implementation that satisfies the requirement.
+- Fix root causes instead of adding one-off workarounds.
+- Do not add unnecessary abstractions, wrappers, dependencies, or architectural layers.
+- Do not modify unrelated code.
+- Do not silently swallow exceptions.
+- Keep business logic explicit and testable.
+- Preserve existing behavior unless the requirement explicitly changes it.
+- Inspect existing usages before changing a public API, shared type, schema, or interface.
+
+## Constants
+
+- Do not scatter magic values or reusable constant strings through the codebase.
+- Backend constants belong under `backend/src/main/java/com/issueflow/constants/`.
+- Frontend constants belong under `frontend/src/constants/`.
+- Prefer enums for closed domain concepts such as status, severity, priority, and category.
+- Organize constants by responsibility rather than creating one oversized constants file.
+
+## Configuration and Secrets
+
+- Never hard-code credentials, secrets, tokens, private keys, or sensitive configuration.
+- Any new environment variable must also be added to the appropriate `.env.example`.
+- Example secret values must be sanitized.
+- Never commit runtime `.env` files.
+- Never commit the SQLite runtime database.
+
+## Style Constraints
+
+- Do not use emojis in source code, comments, documentation, UI copy, or generated project text.
+- Do not use em dash characters in source code, comments, documentation, UI copy, or generated project text.
+- Keep names descriptive and professional.
+- Avoid placeholder production-facing text such as `foo`, `bar`, or `lorem ipsum`.
+
+## Before Declaring Work Complete
+
+- Review the generated diff.
+- Confirm every changed file is necessary.
+- Run relevant tests.
+- Run the applicable build or verification command.
+- Verify representative normal behavior and important failure paths.
+- Confirm the implementation matches the project requirements.
+- Report assumptions or known limitations.

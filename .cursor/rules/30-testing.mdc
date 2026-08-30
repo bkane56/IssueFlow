@@ -1,0 +1,76 @@
+---
+description: Testing and verification rules for backend and frontend work.
+globs:
+  - "backend/src/**/*.java"
+  - "frontend/src/**/*.ts"
+  - "frontend/src/**/*.tsx"
+  - "backend/pom.xml"
+  - "frontend/package.json"
+alwaysApply: false
+---
+
+# Testing and Verification Rules
+
+## General Principles
+
+- Test behavior and requirements rather than implementation details.
+- Add meaningful tests for new or changed behavior.
+- Include relevant normal cases, boundary cases, edge cases, and failure paths.
+- Do not add low-value tests solely to increase coverage.
+- Review generated tests as critically as production code.
+- When fixing a defect, add a regression test when practical.
+- Do not weaken or delete a valid test merely to make the suite pass.
+- If a test is incorrect, explain why before changing it.
+
+## Backend
+
+Use:
+
+```bash
+./mvnw test
+./mvnw clean verify
+```
+
+Prioritize strong tests for:
+
+- `TriageService`
+- priority thresholds
+- scoring factors
+- score boundary conditions
+- issue creation
+- automatic triage
+- status changes
+- assignment
+- history creation
+- validation failures
+- not-found responses
+
+## Frontend
+
+Use:
+
+```bash
+yarn test
+yarn build
+```
+
+Prioritize meaningful tests for:
+
+- dashboard rendering
+- issue table rendering
+- filtering
+- create issue validation
+- issue detail rendering
+- triage explanation
+- priority recalculation results
+- error states
+
+## Debugging Failures
+
+When a test fails:
+
+- Identify the root cause.
+- Fix the underlying implementation problem.
+- Do not add arbitrary conditionals, retries, fallbacks, or mocks just to make the test pass.
+- Re-run the focused test first.
+- Run the broader applicable test suite after the focused test passes.

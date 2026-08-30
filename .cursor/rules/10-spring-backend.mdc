@@ -1,0 +1,120 @@
+---
+description: Spring Boot backend architecture and implementation rules.
+globs:
+  - "backend/**/*.java"
+  - "backend/**/pom.xml"
+  - "backend/**/*.yml"
+  - "backend/**/*.yaml"
+  - "backend/**/*.properties"
+alwaysApply: false
+---
+
+# Spring Boot Backend Rules
+
+## Build and Runtime
+
+- Use Java 17.
+- Use Maven only.
+- Prefer `./mvnw`.
+- Do not add Gradle files or Gradle dependencies.
+- Keep `pom.xml` focused and avoid unnecessary dependencies.
+
+## Package Structure
+
+Prefer this package organization:
+
+```text
+com.issueflow
+├── config
+├── constants
+├── controller
+├── dto
+│   ├── request
+│   └── response
+├── entity
+├── exception
+├── mapper
+├── repository
+├── service
+└── validation
+```
+
+## Layer Responsibilities
+
+### Controllers
+
+Controllers must:
+
+- Handle HTTP concerns.
+- Accept request DTOs.
+- Trigger validation.
+- Delegate to services.
+- Return response DTOs.
+- Avoid business logic.
+- Avoid direct repository access.
+
+### Services
+
+Services must:
+
+- Contain application and domain business logic.
+- Coordinate repository operations.
+- Manage status transitions.
+- Create issue history records where required.
+- Keep triage logic in `TriageService`.
+
+### Repositories
+
+Repositories must:
+
+- Handle persistence only.
+- Use Spring Data JPA.
+- Avoid business logic.
+
+## DTOs and Mapping
+
+- Do not expose JPA entities directly through REST endpoints.
+- Use request and response DTOs.
+- Keep mapping explicit and understandable.
+- Do not introduce a mapping framework unless it provides a clear benefit.
+
+## Validation
+
+- Use Jakarta Bean Validation for request validation.
+- Validate required fields, ranges, and formats at the API boundary.
+- Backend validation is authoritative even if the frontend also validates.
+- Return useful validation errors.
+
+## Error Handling
+
+- Use centralized exception handling with `@RestControllerAdvice`.
+- Return consistent JSON error responses.
+- Do not expose stack traces to API clients.
+- Do not silently swallow exceptions.
+- Handle not-found, validation, invalid-state, and unexpected errors appropriately.
+
+## Persistence
+
+- Use SQLite for this project.
+- Use Spring Data JPA and Hibernate.
+- Do not construct unsafe SQL strings.
+- Keep persistence implementation straightforward.
+- Do not introduce another database unless explicitly requested.
+
+## Triage Logic
+
+- Triage calculations belong in `TriageService`.
+- Scoring weights and thresholds must use named constants.
+- Return both the calculated score and the explanation factors.
+- Do not duplicate triage calculations in controllers or the frontend.
+- Keep triage behavior deterministic and unit-testable.
+
+## Audit History
+
+Create history records for relevant changes such as:
+
+- issue creation
+- status changes
+- assignee changes
+- priority changes
+- triage recalculation when it changes meaningful state
