@@ -2,17 +2,17 @@ import { useState } from 'react'
 import { createUser, listUsers } from '../api/usersApi'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAsync } from '../hooks/useAsync'
-import { validateAssigneeForm, type AssigneeFormErrors } from '../utils/formValidation'
+import { validateUserForm, type UserFormErrors } from '../utils/formValidation'
 
-export function AssigneesPage() {
+export function UsersPage() {
   const users = useAsync(listUsers, [])
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [errors, setErrors] = useState<AssigneeFormErrors>({})
+  const [errors, setErrors] = useState<UserFormErrors>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   async function handleSubmit() {
-    const nextErrors = validateAssigneeForm(name, email)
+    const nextErrors = validateUserForm(name, email)
     setErrors(nextErrors)
     if (Object.keys(nextErrors).length > 0) {
       return
@@ -24,13 +24,13 @@ export function AssigneesPage() {
       setEmail('')
       await users.reload()
     } catch (cause) {
-      setSubmitError(cause instanceof Error ? cause.message : 'Unable to add the assignee')
+      setSubmitError(cause instanceof Error ? cause.message : 'Unable to add the user')
     }
   }
 
   return (
     <div>
-      <h1>Assignees</h1>
+      <h1>Users</h1>
       <p>Add team members so they can be assigned to issues.</p>
       {submitError ? <StatusMessage tone="error">{submitError}</StatusMessage> : null}
       <form
@@ -57,15 +57,15 @@ export function AssigneesPage() {
           </label>
         </div>
         <button type="submit" className="button-primary">
-          Add assignee
+          Add user
         </button>
       </form>
 
-      {users.loading ? <StatusMessage>Loading assignees.</StatusMessage> : null}
+      {users.loading ? <StatusMessage>Loading users.</StatusMessage> : null}
       {users.error ? <StatusMessage tone="error">{users.error}</StatusMessage> : null}
       {users.data ? (
         users.data.length === 0 ? (
-          <p className="empty-state">No assignees have been added yet.</p>
+          <p className="empty-state">No users have been added yet.</p>
         ) : (
           <div className="table-wrap">
             <table className="data-table">

@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ROUTES } from './constants/routes'
 import { AppLayout } from './layouts/AppLayout'
-import { AssigneesPage } from './pages/AssigneesPage'
+import { UsersPage } from './pages/UsersPage'
 import { CreateIssuePage } from './pages/CreateIssuePage'
 import { DashboardPage } from './pages/DashboardPage'
 import { EditIssuePage } from './pages/EditIssuePage'
@@ -18,7 +18,7 @@ export default function App() {
           <Route path={ROUTES.newIssue} element={<CreateIssuePage />} />
           <Route path={ROUTES.editIssue} element={<EditIssuePage />} />
           <Route path={ROUTES.issueDetail} element={<IssueDetailPage />} />
-          <Route path={ROUTES.assignees} element={<AssigneesPage />} />
+          <Route path={ROUTES.users} element={<UsersPage />} />
           <Route path="*" element={<Navigate to={ROUTES.dashboard} replace />} />
         </Route>
       </Routes>

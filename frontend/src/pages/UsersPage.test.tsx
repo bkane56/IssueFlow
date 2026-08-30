@@ -3,14 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createUser, listUsers } from '../api/usersApi'
 import { sampleUser } from '../test/fixtures'
-import { AssigneesPage } from './AssigneesPage'
+import { UsersPage } from './UsersPage'
 
 vi.mock('../api/usersApi', () => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
 }))
 
-describe('AssigneesPage', () => {
+describe('UsersPage', () => {
   beforeEach(() => {
     vi.mocked(listUsers).mockResolvedValue([sampleUser])
     vi.mocked(createUser).mockReset()
@@ -18,17 +18,17 @@ describe('AssigneesPage', () => {
 
   it('shows validation messages when required fields are empty', async () => {
     const user = userEvent.setup()
-    render(<AssigneesPage />)
+    render(<UsersPage />)
 
     expect(await screen.findByText(sampleUser.name)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Add assignee' }))
+    await user.click(screen.getByRole('button', { name: 'Add user' }))
 
     expect(await screen.findByText('Name is required')).toBeInTheDocument()
     expect(screen.getByText('Email is required')).toBeInTheDocument()
     expect(createUser).not.toHaveBeenCalled()
   })
 
-  it('adds an assignee and refreshes the list', async () => {
+  it('adds a user and refreshes the list', async () => {
     const user = userEvent.setup()
     const created = {
       id: 8,
@@ -41,12 +41,12 @@ describe('AssigneesPage', () => {
       .mockResolvedValueOnce([sampleUser])
       .mockResolvedValueOnce([sampleUser, created])
 
-    render(<AssigneesPage />)
+    render(<UsersPage />)
     expect(await screen.findByText(sampleUser.name)).toBeInTheDocument()
 
     await user.type(screen.getByLabelText('Name'), 'Casey Nguyen')
     await user.type(screen.getByLabelText('Email'), 'casey.nguyen@issueflow.local')
-    await user.click(screen.getByRole('button', { name: 'Add assignee' }))
+    await user.click(screen.getByRole('button', { name: 'Add user' }))
 
     expect(await screen.findByText('Casey Nguyen')).toBeInTheDocument()
     expect(createUser).toHaveBeenCalledWith('Casey Nguyen', 'casey.nguyen@issueflow.local')

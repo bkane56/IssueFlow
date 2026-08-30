@@ -34,7 +34,7 @@ class UserServiceTest {
     }
 
     @Test
-    void createSavesActiveAssignee() {
+    void createSavesActiveUser() {
         when(userRepository.existsByEmailIgnoreCase("casey.nguyen@issueflow.local")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);

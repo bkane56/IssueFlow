@@ -31,7 +31,7 @@ class UserControllerTest {
     private UserService userService;
 
     @Test
-    void createsAssignee() throws Exception {
+    void createsUser() throws Exception {
         when(userService.create(any(CreateUserRequest.class)))
                 .thenReturn(new UserResponse(8L, "Casey Nguyen", "casey.nguyen@issueflow.local", true));
 

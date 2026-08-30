@@ -21,13 +21,13 @@ export function validateIssueForm(values: IssueFormValues): FormErrors {
   return errors
 }
 
-export interface AssigneeFormErrors {
+export interface UserFormErrors {
   name?: string
   email?: string
 }
 
-export function validateAssigneeForm(name: string, email: string): AssigneeFormErrors {
-  const errors: AssigneeFormErrors = {}
+export function validateUserForm(name: string, email: string): UserFormErrors {
+  const errors: UserFormErrors = {}
   if (!name.trim()) {
     errors.name = 'Name is required'
   }

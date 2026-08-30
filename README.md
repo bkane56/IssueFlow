@@ -55,7 +55,7 @@ cd backend
 
 The API listens on `http://localhost:8080`.
 
-SQLite is created at `backend/data/issueflow.db` on first start. Seed data loads automatically when the database is empty: 5 users and 20 issues. Additional assignees can be created from the Assignees page.
+SQLite is created at `backend/data/issueflow.db` on first start. Seed data loads automatically when the database is empty: 5 users and 20 issues. Additional users can be created from the Users page.
 
 ### Frontend
 

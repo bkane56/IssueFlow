@@ -4,7 +4,7 @@ export const ROUTES = {
   newIssue: '/issues/new',
   issueDetail: '/issues/:id',
   editIssue: '/issues/:id/edit',
-  assignees: '/assignees',
+  users: '/users',
 } as const
 
 export function issueDetailPath(id: number): string {
