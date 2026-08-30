@@ -18,6 +18,7 @@ export function AppLayout() {
             Issues
           </NavLink>
           <NavLink to={ROUTES.newIssue}>New Issue</NavLink>
+          <NavLink to={ROUTES.assignees}>Assignees</NavLink>
           <a href={SWAGGER_URL} target="_blank" rel="noreferrer">
             API Docs
           </a>

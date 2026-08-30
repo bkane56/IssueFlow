@@ -13,6 +13,9 @@ public final class ValidationConstants {
     public static final String SEVERITY_REQUIRED = "Severity is required";
     public static final String CATEGORY_REQUIRED = "Category is required";
     public static final String STATUS_REQUIRED = "Status is required";
+    public static final String NAME_REQUIRED = "Name is required";
+    public static final String EMAIL_REQUIRED = "Email is required";
+    public static final String EMAIL_INVALID = "Email must be a valid address";
     public static final String AFFECTED_USERS_MIN = "Affected users cannot be negative";
 
     private ValidationConstants() {

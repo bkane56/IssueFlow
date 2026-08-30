@@ -21,6 +21,24 @@ export function validateIssueForm(values: IssueFormValues): FormErrors {
   return errors
 }
 
+export interface AssigneeFormErrors {
+  name?: string
+  email?: string
+}
+
+export function validateAssigneeForm(name: string, email: string): AssigneeFormErrors {
+  const errors: AssigneeFormErrors = {}
+  if (!name.trim()) {
+    errors.name = 'Name is required'
+  }
+  if (!email.trim()) {
+    errors.email = 'Email is required'
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    errors.email = 'Email must be a valid address'
+  }
+  return errors
+}
+
 export const EMPTY_FORM: IssueFormValues = {
   title: '',
   description: '',

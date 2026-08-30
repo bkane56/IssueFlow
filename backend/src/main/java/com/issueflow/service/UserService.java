@@ -1,8 +1,10 @@
 package com.issueflow.service;
 
 import com.issueflow.constants.ErrorConstants;
+import com.issueflow.dto.request.CreateUserRequest;
 import com.issueflow.dto.response.UserResponse;
 import com.issueflow.entity.User;
+import com.issueflow.exception.DuplicateResourceException;
 import com.issueflow.exception.ResourceNotFoundException;
 import com.issueflow.mapper.UserMapper;
 import com.issueflow.repository.UserRepository;
@@ -31,6 +33,16 @@ public class UserService {
 
     public UserResponse findById(Long id) {
         return userMapper.toResponse(getUser(id));
+    }
+
+    @Transactional
+    public UserResponse create(CreateUserRequest request) {
+        String email = request.email().trim();
+        if (userRepository.existsByEmailIgnoreCase(email)) {
+            throw new DuplicateResourceException(ErrorConstants.EMAIL_IN_USE);
+        }
+        User user = new User(request.name().trim(), email, true);
+        return userMapper.toResponse(userRepository.save(user));
     }
 
     public User getUser(Long id) {
