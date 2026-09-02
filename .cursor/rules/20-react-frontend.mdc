@@ -78,3 +78,4 @@ frontend/src/
 - Do not use emojis.
 - Do not use em dash characters.
 - The application should work cleanly on a normal laptop display.
+- All code must be a11y, WCAG and ADA complient.

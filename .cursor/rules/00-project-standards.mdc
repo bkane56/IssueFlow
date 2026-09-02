@@ -62,3 +62,4 @@ alwaysApply: true
 - Verify representative normal behavior and important failure paths.
 - Confirm the implementation matches the project requirements.
 - Report assumptions or known limitations.
+- Confirm all code is a11y, WCAG and ADA complient.
