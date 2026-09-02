@@ -51,4 +51,20 @@ describe('UsersPage', () => {
     expect(await screen.findByText('Casey Nguyen')).toBeInTheDocument()
     expect(createUser).toHaveBeenCalledWith('Casey Nguyen', 'casey.nguyen@issueflow.local')
   })
+
+  it('shows an error when the user list cannot be loaded', async () => {
+    vi.mocked(listUsers).mockRejectedValue(new Error('Unable to load users'))
+
+    render(<UsersPage />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load users')
+  })
+
+  it('shows an empty state when no users exist', async () => {
+    vi.mocked(listUsers).mockResolvedValue([])
+
+    render(<UsersPage />)
+
+    expect(await screen.findByText('No users have been added yet.')).toBeInTheDocument()
+  })
 })
