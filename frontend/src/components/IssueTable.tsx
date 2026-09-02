@@ -16,6 +16,7 @@ export function IssueTable({ issues }: IssueTableProps) {
   return (
     <div className="table-wrap">
       <table className="data-table">
+        <caption className="sr-only">Issues</caption>
         <thead>
           <tr>
             <th>ID</th>

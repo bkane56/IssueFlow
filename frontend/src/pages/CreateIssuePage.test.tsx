@@ -33,6 +33,8 @@ describe('CreateIssuePage', () => {
 
     expect(await screen.findByText('Title is required')).toBeInTheDocument()
     expect(screen.getByText('Description is required')).toBeInTheDocument()
+    expect(document.getElementById('title-input')).toHaveAttribute('aria-invalid', 'true')
+    expect(document.getElementById('description-input')).toHaveAttribute('aria-invalid', 'true')
     expect(createIssue).not.toHaveBeenCalled()
   })
 })

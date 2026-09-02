@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { createUser, listUsers } from '../api/usersApi'
 import { StatusMessage } from '../components/StatusMessage'
 import { useAsync } from '../hooks/useAsync'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import { validateUserForm, type UserFormErrors } from '../utils/formValidation'
 
 export function UsersPage() {
+  useDocumentTitle('Users - IssueFlow')
   const users = useAsync(listUsers, [])
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -43,17 +45,34 @@ export function UsersPage() {
         <div className="form-grid">
           <label>
             Name
-            <input value={name} onChange={(event) => setName(event.target.value)} />
-            {errors.name ? <span className="field-error">{errors.name}</span> : null}
+            <input
+              id="user-name-input"
+              value={name}
+              aria-invalid={errors.name ? true : undefined}
+              aria-describedby={errors.name ? 'user-name-error' : undefined}
+              onChange={(event) => setName(event.target.value)}
+            />
+            {errors.name ? (
+              <span id="user-name-error" className="field-error">
+                {errors.name}
+              </span>
+            ) : null}
           </label>
           <label>
             Email
             <input
+              id="user-email-input"
               type="email"
               value={email}
+              aria-invalid={errors.email ? true : undefined}
+              aria-describedby={errors.email ? 'user-email-error' : undefined}
               onChange={(event) => setEmail(event.target.value)}
             />
-            {errors.email ? <span className="field-error">{errors.email}</span> : null}
+            {errors.email ? (
+              <span id="user-email-error" className="field-error">
+                {errors.email}
+              </span>
+            ) : null}
           </label>
         </div>
         <button type="submit" className="button-primary">
@@ -69,6 +88,7 @@ export function UsersPage() {
         ) : (
           <div className="table-wrap">
             <table className="data-table">
+              <caption className="sr-only">Users</caption>
               <thead>
                 <tr>
                   <th>Name</th>

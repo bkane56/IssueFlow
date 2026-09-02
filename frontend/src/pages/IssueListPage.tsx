@@ -6,9 +6,11 @@ import { IssueTable } from '../components/IssueTable'
 import { StatusMessage } from '../components/StatusMessage'
 import { EMPTY_ISSUE_FILTERS } from '../constants/filters'
 import { useAsync } from '../hooks/useAsync'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { IssueFilters } from '../types/issue'
 
 export function IssueListPage() {
+  useDocumentTitle('Issues - IssueFlow')
   const [filters, setFilters] = useState<IssueFilters>(EMPTY_ISSUE_FILTERS)
   const users = useAsync(listUsers, [])
   const issues = useAsync(() => listIssues(filters), [
