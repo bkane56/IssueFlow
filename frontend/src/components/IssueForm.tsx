@@ -18,6 +18,17 @@ interface IssueFormProps {
   onSubmit: () => void
 }
 
+function fieldAriaProps(field: keyof FormErrors, errors: FormErrors) {
+  const errorId = `${field}-error`
+  const hasError = Boolean(errors[field])
+
+  return {
+    id: `${field}-input`,
+    'aria-invalid': hasError || undefined,
+    'aria-describedby': hasError ? errorId : undefined,
+  }
+}
+
 export function IssueForm({ values, users, errors, submitLabel, onChange, onSubmit }: IssueFormProps) {
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -29,24 +40,35 @@ export function IssueForm({ values, users, errors, submitLabel, onChange, onSubm
       <label>
         Title
         <input
+          {...fieldAriaProps('title', errors)}
           value={values.title}
           onChange={(event) => onChange({ ...values, title: event.target.value })}
         />
-        {errors.title ? <span className="field-error">{errors.title}</span> : null}
+        {errors.title ? (
+          <span id="title-error" className="field-error">
+            {errors.title}
+          </span>
+        ) : null}
       </label>
       <label>
         Description
         <textarea
+          {...fieldAriaProps('description', errors)}
           rows={6}
           value={values.description}
           onChange={(event) => onChange({ ...values, description: event.target.value })}
         />
-        {errors.description ? <span className="field-error">{errors.description}</span> : null}
+        {errors.description ? (
+          <span id="description-error" className="field-error">
+            {errors.description}
+          </span>
+        ) : null}
       </label>
       <div className="form-grid">
         <label>
           Category
           <select
+            id="category-input"
             value={values.category}
             onChange={(event) => onChange({ ...values, category: event.target.value as IssueFormValues['category'] })}
           >
@@ -60,6 +82,7 @@ export function IssueForm({ values, users, errors, submitLabel, onChange, onSubm
         <label>
           Severity
           <select
+            id="severity-input"
             value={values.severity}
             onChange={(event) => onChange({ ...values, severity: event.target.value as IssueFormValues['severity'] })}
           >
@@ -73,6 +96,7 @@ export function IssueForm({ values, users, errors, submitLabel, onChange, onSubm
         <label>
           Assignee
           <select
+            id="assignee-input"
             value={values.assignedUserId}
             onChange={(event) => onChange({ ...values, assignedUserId: event.target.value })}
           >
@@ -87,12 +111,17 @@ export function IssueForm({ values, users, errors, submitLabel, onChange, onSubm
         <label>
           Affected users
           <input
+            {...fieldAriaProps('affectedUsers', errors)}
             type="number"
             min={0}
             value={values.affectedUsers}
             onChange={(event) => onChange({ ...values, affectedUsers: event.target.value })}
           />
-          {errors.affectedUsers ? <span className="field-error">{errors.affectedUsers}</span> : null}
+          {errors.affectedUsers ? (
+            <span id="affectedUsers-error" className="field-error">
+              {errors.affectedUsers}
+            </span>
+          ) : null}
         </label>
       </div>
       <label className="checkbox-label">

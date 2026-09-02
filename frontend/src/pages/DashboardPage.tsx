@@ -4,8 +4,10 @@ import { IssueTable } from '../components/IssueTable'
 import { StatusMessage } from '../components/StatusMessage'
 import { EMPTY_ISSUE_FILTERS } from '../constants/filters'
 import { useAsync } from '../hooks/useAsync'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 
 export function DashboardPage() {
+  useDocumentTitle('Dashboard - IssueFlow')
   const dashboard = useAsync(getDashboard, [])
   const issues = useAsync(() => listIssues(EMPTY_ISSUE_FILTERS), [])
 

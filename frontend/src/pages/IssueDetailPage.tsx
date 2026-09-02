@@ -9,6 +9,7 @@ import { TriageExplanation } from '../components/TriageExplanation'
 import { NEXT_STATUS, STATUS_LABELS } from '../constants/labels'
 import { issueEditPath } from '../constants/routes'
 import { useAsync } from '../hooks/useAsync'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { Priority } from '../types/issue'
 import { formatBoolean, formatDateTime } from '../utils/format'
 
@@ -23,6 +24,8 @@ export function IssueDetailPage() {
 
   const issue = issueQuery.data
   const nextStatus = issue ? NEXT_STATUS[issue.status] : undefined
+  const pageTitle = issue ? `${issue.title} - IssueFlow` : 'Issue detail - IssueFlow'
+  useDocumentTitle(pageTitle)
 
   async function handleStatusChange() {
     if (!issue || !nextStatus) {
@@ -67,9 +70,6 @@ export function IssueDetailPage() {
 
   return (
     <div>
-      {issueQuery.loading ? <StatusMessage>Loading issue.</StatusMessage> : null}
-      {issueQuery.error ? <StatusMessage tone="error">{issueQuery.error}</StatusMessage> : null}
-      {actionError ? <StatusMessage tone="error">{actionError}</StatusMessage> : null}
       {issue ? (
         <>
           <div className="page-header">
@@ -169,7 +169,14 @@ export function IssueDetailPage() {
             {historyQuery.data ? <HistoryTimeline history={historyQuery.data} /> : null}
           </section>
         </>
-      ) : null}
+      ) : (
+        <>
+          <h1>Issue detail</h1>
+          {issueQuery.loading ? <StatusMessage>Loading issue.</StatusMessage> : null}
+          {issueQuery.error ? <StatusMessage tone="error">{issueQuery.error}</StatusMessage> : null}
+        </>
+      )}
+      {actionError ? <StatusMessage tone="error">{actionError}</StatusMessage> : null}
     </div>
   )
 }

@@ -6,10 +6,12 @@ import { IssueForm } from '../components/IssueForm'
 import { StatusMessage } from '../components/StatusMessage'
 import { issueDetailPath } from '../constants/routes'
 import { useAsync } from '../hooks/useAsync'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { IssueFormValues } from '../types/issue'
 import { EMPTY_FORM, validateIssueForm, type FormErrors } from '../utils/formValidation'
 
 export function CreateIssuePage() {
+  useDocumentTitle('New Issue - IssueFlow')
   const navigate = useNavigate()
   const users = useAsync(listUsers, [])
   const [values, setValues] = useState<IssueFormValues>(EMPTY_FORM)

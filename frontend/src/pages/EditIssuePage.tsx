@@ -6,11 +6,13 @@ import { IssueForm } from '../components/IssueForm'
 import { StatusMessage } from '../components/StatusMessage'
 import { issueDetailPath } from '../constants/routes'
 import { useAsync } from '../hooks/useAsync'
+import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { IssueFormValues } from '../types/issue'
 import { validateIssueForm, type FormErrors } from '../utils/formValidation'
 import { toIssueFormValues } from '../utils/issueForm'
 
 export function EditIssuePage() {
+  useDocumentTitle('Edit Issue - IssueFlow')
   const { id } = useParams()
   const issueId = Number(id)
   const navigate = useNavigate()
