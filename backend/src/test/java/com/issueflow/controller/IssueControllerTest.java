@@ -2,10 +2,15 @@ package com.issueflow.controller;
 
 import com.issueflow.config.TimeConfig;
 import com.issueflow.constants.ErrorConstants;
+import com.issueflow.dto.request.AssignIssueRequest;
 import com.issueflow.dto.request.ChangeStatusRequest;
 import com.issueflow.dto.request.CreateIssueRequest;
+import com.issueflow.dto.request.UpdateIssueRequest;
+import com.issueflow.dto.response.IssueHistoryResponse;
 import com.issueflow.dto.response.IssueResponse;
+import com.issueflow.dto.response.PriorityChangeResponse;
 import com.issueflow.dto.response.TriageResultResponse;
+import com.issueflow.entity.HistoryEventType;
 import com.issueflow.entity.Category;
 import com.issueflow.entity.IssueStatus;
 import com.issueflow.entity.Priority;
@@ -27,9 +32,11 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -51,6 +58,27 @@ class IssueControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].title").value("Checkout API returning 500 responses"))
                 .andExpect(jsonPath("$[0].priority").value("P1"));
+    }
+
+    @Test
+    void listsIssuesWithStatusFilter() throws Exception {
+        when(issueService.findAll(IssueStatus.NEW, null, null, null, null, null))
+                .thenReturn(List.of(sampleIssue()));
+
+        mockMvc.perform(get("/api/issues").param("status", "NEW"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(10))
+                .andExpect(jsonPath("$[0].status").value("NEW"));
+    }
+
+    @Test
+    void returnsIssueById() throws Exception {
+        when(issueService.findById(10L)).thenReturn(sampleIssue());
+
+        mockMvc.perform(get("/api/issues/10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(10))
+                .andExpect(jsonPath("$.title").value("Checkout API returning 500 responses"));
     }
 
     @Test
@@ -90,6 +118,119 @@ class IssueControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void updatesIssue() throws Exception {
+        when(issueService.update(eq(10L), any(UpdateIssueRequest.class))).thenReturn(sampleIssue());
+
+        mockMvc.perform(put("/api/issues/10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Checkout API returning 500 responses",
+                                  "description": "Payment confirmation fails during peak traffic.",
+                                  "category": "BACKEND",
+                                  "severity": "CRITICAL",
+                                  "customerFacing": true,
+                                  "productionImpact": true,
+                                  "affectedUsers": 120
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(10));
+    }
+
+    @Test
+    void rejectsInvalidUpdateRequest() throws Exception {
+        mockMvc.perform(put("/api/issues/10")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "",
+                                  "description": "Missing title",
+                                  "category": "BACKEND",
+                                  "severity": "HIGH",
+                                  "affectedUsers": -1
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").exists());
+    }
+
+    @Test
+    void deletesIssue() throws Exception {
+        mockMvc.perform(delete("/api/issues/10"))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void assignsIssue() throws Exception {
+        when(issueService.assign(eq(10L), any(AssignIssueRequest.class))).thenReturn(sampleIssue());
+
+        mockMvc.perform(patch("/api/issues/10/assign")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "assignedUserId": 3
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(10));
+    }
+
+    @Test
+    void recalculatesTriage() throws Exception {
+        when(issueService.recalculateTriage(10L)).thenReturn(
+                new PriorityChangeResponse(Priority.P4, Priority.P1, true, sampleIssue())
+        );
+
+        mockMvc.perform(post("/api/issues/10/triage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.changed").value(true))
+                .andExpect(jsonPath("$.previousPriority").value("P4"))
+                .andExpect(jsonPath("$.currentPriority").value("P1"))
+                .andExpect(jsonPath("$.issue.id").value(10));
+    }
+
+    @Test
+    void returnsIssueHistory() throws Exception {
+        when(issueService.findHistory(10L)).thenReturn(List.of(
+                new IssueHistoryResponse(
+                        1L,
+                        HistoryEventType.ISSUE_CREATED,
+                        null,
+                        IssueStatus.NEW.name(),
+                        "Issue created",
+                        Instant.parse("2026-08-30T12:00:00Z")
+                )
+        ));
+
+        mockMvc.perform(get("/api/issues/10/history"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].eventType").value("ISSUE_CREATED"))
+                .andExpect(jsonPath("$[0].newValue").value("NEW"));
+    }
+
+    @Test
+    void rejectsMalformedRequestBody() throws Exception {
+        mockMvc.perform(post("/api/issues")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value(ErrorConstants.INVALID_REQUEST_BODY))
+                .andExpect(jsonPath("$.path").value("/api/issues"));
+    }
+
+    @Test
+    void rejectsInvalidFilterEnum() throws Exception {
+        mockMvc.perform(get("/api/issues").param("status", "NOT_A_STATUS"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("Invalid value for parameter status"))
+                .andExpect(jsonPath("$.path").value("/api/issues"));
     }
 
     @Test

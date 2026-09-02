@@ -5,11 +5,13 @@ import com.issueflow.dto.request.AssignIssueRequest;
 import com.issueflow.dto.request.ChangeStatusRequest;
 import com.issueflow.dto.request.CreateIssueRequest;
 import com.issueflow.dto.request.UpdateIssueRequest;
+import com.issueflow.dto.response.IssueHistoryResponse;
 import com.issueflow.dto.response.IssueResponse;
 import com.issueflow.dto.response.PriorityChangeResponse;
 import com.issueflow.entity.Category;
 import com.issueflow.entity.HistoryEventType;
 import com.issueflow.entity.Issue;
+import com.issueflow.entity.IssueHistory;
 import com.issueflow.entity.IssueStatus;
 import com.issueflow.entity.Priority;
 import com.issueflow.entity.Severity;
@@ -35,6 +37,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -108,6 +111,31 @@ class IssueServiceTest {
     }
 
     @Test
+    void createAssignsRequestedUser() {
+        User user = assignedUser();
+        when(userService.getUser(3L)).thenReturn(user);
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> {
+            Issue issue = invocation.getArgument(0);
+            issue.setId(10L);
+            return issue;
+        });
+
+        IssueResponse response = issueService.create(new CreateIssueRequest(
+                "Checkout API returning 500 responses",
+                "Payment confirmation fails during peak traffic.",
+                Category.BACKEND,
+                Severity.LOW,
+                3L,
+                false,
+                false,
+                0
+        ));
+
+        assertThat(response.assignedUser().id()).isEqualTo(3L);
+        assertThat(response.assignedUser().name()).isEqualTo("Alex Chen");
+    }
+
+    @Test
     void updateRecalculatesPriorityAndRecordsHistory() {
         Issue issue = existingIssue(IssueStatus.NEW, Priority.P4, 0);
         when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
@@ -148,19 +176,36 @@ class IssueServiceTest {
                 .containsExactly(HistoryEventType.STATUS_CHANGED);
     }
 
-    @Test
-    void rejectsInvalidStatusTransition() {
-        Issue issue = existingIssue(IssueStatus.CLOSED, Priority.P4, 0);
+    @ParameterizedTest
+    @CsvSource({
+            "CLOSED, IN_PROGRESS",
+            "NEW, CLOSED"
+    })
+    void rejectsInvalidStatusTransition(IssueStatus current, IssueStatus next) {
+        Issue issue = existingIssue(current, Priority.P4, 0);
         when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
 
-        assertThatThrownBy(() -> issueService.changeStatus(10L, new ChangeStatusRequest(IssueStatus.IN_PROGRESS)))
-                .isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> issueService.changeStatus(10L, new ChangeStatusRequest(next)))
+                .isInstanceOf(InvalidStateTransitionException.class)
+                .hasMessage(ErrorConstants.INVALID_STATUS_TRANSITION.formatted(current, next));
+        verify(issueRepository, never()).save(any(Issue.class));
+    }
+
+    @Test
+    void changeStatusIsNoOpWhenStatusUnchanged() {
+        Issue issue = existingIssue(IssueStatus.TRIAGED, Priority.P4, 0);
+        when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
+
+        IssueResponse response = issueService.changeStatus(10L, new ChangeStatusRequest(IssueStatus.TRIAGED));
+
+        assertThat(response.status()).isEqualTo(IssueStatus.TRIAGED);
+        assertThat(issue.getHistory()).isEmpty();
+        verify(issueRepository, never()).save(any(Issue.class));
     }
 
     @Test
     void assignWritesAssigneeHistory() {
-        User user = new User("Alex Chen", "alex.chen@issueflow.local", true);
-        user.setId(3L);
+        User user = assignedUser();
         Issue issue = existingIssue(IssueStatus.NEW, Priority.P4, 0);
         when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
         when(userService.getUser(3L)).thenReturn(user);
@@ -174,9 +219,23 @@ class IssueServiceTest {
     }
 
     @Test
+    void assignIsNoOpWhenAssigneeUnchanged() {
+        User user = assignedUser();
+        Issue issue = existingIssue(IssueStatus.NEW, Priority.P4, 0);
+        issue.setAssignedUser(user);
+        when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
+        when(userService.getUser(3L)).thenReturn(user);
+
+        IssueResponse response = issueService.assign(10L, new AssignIssueRequest(3L));
+
+        assertThat(response.assignedUser().id()).isEqualTo(3L);
+        assertThat(issue.getHistory()).isEmpty();
+        verify(issueRepository, never()).save(any(Issue.class));
+    }
+
+    @Test
     void unassignClearsAssigneeAndWritesHistory() {
-        User user = new User("Alex Chen", "alex.chen@issueflow.local", true);
-        user.setId(3L);
+        User user = assignedUser();
         Issue issue = existingIssue(IssueStatus.NEW, Priority.P4, 0);
         issue.setAssignedUser(user);
         when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
@@ -212,6 +271,16 @@ class IssueServiceTest {
     }
 
     @Test
+    void deleteRemovesExistingIssue() {
+        Issue issue = existingIssue(IssueStatus.NEW, Priority.P4, 0);
+        when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
+
+        issueService.delete(10L);
+
+        verify(issueRepository).delete(issue);
+    }
+
+    @Test
     void deleteThrowsWhenIssueIsMissing() {
         assertMissingIssue(() -> issueService.delete(1042L));
         verify(issueRepository, never()).delete(any(Issue.class));
@@ -230,6 +299,22 @@ class IssueServiceTest {
     @Test
     void recalculateTriageThrowsWhenIssueIsMissing() {
         assertMissingIssue(() -> issueService.recalculateTriage(1042L));
+    }
+
+    @Test
+    void findHistoryReturnsEntriesInCreatedAtOrder() {
+        Issue issue = existingIssue(IssueStatus.NEW, Priority.P4, 0);
+        when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
+        when(issueHistoryRepository.findByIssueIdOrderByCreatedAtAsc(10L)).thenReturn(List.of(
+                historyEntry(1L, HistoryEventType.ISSUE_CREATED, NOW.minusSeconds(60)),
+                historyEntry(2L, HistoryEventType.STATUS_CHANGED, NOW)
+        ));
+
+        List<IssueHistoryResponse> history = issueService.findHistory(10L);
+
+        assertThat(history).extracting(IssueHistoryResponse::id).containsExactly(1L, 2L);
+        assertThat(history).extracting(IssueHistoryResponse::eventType)
+                .containsExactly(HistoryEventType.ISSUE_CREATED, HistoryEventType.STATUS_CHANGED);
     }
 
     @Test
@@ -263,6 +348,25 @@ class IssueServiceTest {
         assertThat(unchanged.getHistory()).isEmpty();
     }
 
+    @Test
+    void recalculateWritesScoreHistoryWhenPriorityUnchanged() {
+        Issue issue = existingIssue(IssueStatus.NEW, Priority.P4, 0);
+        issue.setCustomerFacing(true);
+        when(issueRepository.findById(10L)).thenReturn(Optional.of(issue));
+        when(issueRepository.save(any(Issue.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PriorityChangeResponse response = issueService.recalculateTriage(10L);
+
+        assertThat(response.changed()).isFalse();
+        assertThat(response.previousPriority()).isEqualTo(Priority.P4);
+        assertThat(response.currentPriority()).isEqualTo(Priority.P4);
+        assertThat(issue.getPriorityScore()).isEqualTo(20);
+        assertThat(issue.getHistory()).extracting(history -> history.getEventType())
+                .containsExactly(HistoryEventType.TRIAGE_RECALCULATED);
+        assertThat(issue.getHistory().get(0).getOldValue()).isEqualTo("0");
+        assertThat(issue.getHistory().get(0).getNewValue()).isEqualTo("20");
+    }
+
     private void assertMissingIssue(ThrowableAssert.ThrowingCallable action) {
         when(issueRepository.findById(1042L)).thenReturn(Optional.empty());
         assertThatThrownBy(action)
@@ -286,5 +390,19 @@ class IssueServiceTest {
         issue.setCreatedAt(NOW);
         issue.setUpdatedAt(NOW);
         return issue;
+    }
+
+    private User assignedUser() {
+        User user = new User("Alex Chen", "alex.chen@issueflow.local", true);
+        user.setId(3L);
+        return user;
+    }
+
+    private IssueHistory historyEntry(Long id, HistoryEventType eventType, Instant createdAt) {
+        IssueHistory history = new IssueHistory();
+        history.setId(id);
+        history.setEventType(eventType);
+        history.setCreatedAt(createdAt);
+        return history;
     }
 }
