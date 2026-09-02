@@ -121,8 +121,12 @@ class TriageServiceTest {
         Issue below = baseIssue();
         below.setAffectedUsers(24);
 
+        Issue justBelowHigh = baseIssue();
+        justBelowHigh.setAffectedUsers(99);
+
         assertThat(triageService.calculate(high).score()).isEqualTo(TriageConstants.AFFECTED_USERS_HIGH_SCORE);
         assertThat(triageService.calculate(medium).score()).isEqualTo(TriageConstants.AFFECTED_USERS_MEDIUM_SCORE);
+        assertThat(triageService.calculate(justBelowHigh).score()).isEqualTo(TriageConstants.AFFECTED_USERS_MEDIUM_SCORE);
         assertThat(triageService.calculate(below).score()).isZero();
     }
 
@@ -140,10 +144,28 @@ class TriageServiceTest {
     }
 
     @Test
+    void doesNotScoreAgeWhenJustUnder24Hours() {
+        Issue issue = baseIssue();
+        issue.setCreatedAt(NOW.minus(Duration.ofHours(23)));
+        issue.setStatus(IssueStatus.NEW);
+
+        assertThat(triageService.calculate(issue).score()).isZero();
+    }
+
+    @Test
     void doesNotScoreAgeWhenResolved() {
         Issue issue = baseIssue();
         issue.setCreatedAt(NOW.minus(Duration.ofHours(48)));
         issue.setStatus(IssueStatus.RESOLVED);
+
+        assertThat(triageService.calculate(issue).score()).isZero();
+    }
+
+    @Test
+    void doesNotScoreAgeWhenClosed() {
+        Issue issue = baseIssue();
+        issue.setCreatedAt(NOW.minus(Duration.ofHours(48)));
+        issue.setStatus(IssueStatus.CLOSED);
 
         assertThat(triageService.calculate(issue).score()).isZero();
     }
