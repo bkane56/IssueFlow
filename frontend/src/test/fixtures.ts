@@ -36,6 +36,10 @@ export const sampleIssue: Issue = {
   triage: sampleTriage,
 }
 
+export function issueWith(overrides: Partial<Issue>): Issue {
+  return { ...sampleIssue, ...overrides }
+}
+
 export const sampleHistory: IssueHistory[] = [
   {
     id: 1,
