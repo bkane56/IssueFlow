@@ -1,6 +1,7 @@
 package com.issueflow.service;
 
 import com.issueflow.config.OutboundProperties;
+import com.issueflow.constants.LoggingConstants;
 import com.issueflow.constants.OutboundConstants;
 import com.issueflow.constants.RetryClassificationConstants;
 import com.issueflow.entity.HistoryEventType;
@@ -9,6 +10,7 @@ import com.issueflow.entity.IssueHistory;
 import com.issueflow.entity.OutboundJob;
 import com.issueflow.entity.OutboundJobStatus;
 import com.issueflow.exception.OutboundTimeoutException;
+import com.issueflow.logging.OperationalLog;
 import com.issueflow.repository.IssueRepository;
 import com.issueflow.repository.OutboundJobRepository;
 import org.slf4j.Logger;
@@ -18,8 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class OutboundWorkerService {
@@ -75,6 +79,9 @@ public class OutboundWorkerService {
         if (dueJobIds == null || dueJobIds.isEmpty()) {
             return;
         }
+        OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_WORKER_CLAIMED)
+                .put(LoggingConstants.CLAIMED_COUNT, dueJobIds.size())
+                .info(LOGGER);
         for (Long jobId : dueJobIds) {
             processJob(jobId);
         }
@@ -86,35 +93,44 @@ public class OutboundWorkerService {
             return;
         }
 
-        LOGGER.info(
-                "Attempt started jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                claimed.jobId(),
-                claimed.issueId(),
-                claimed.idempotencyKey(),
-                claimed.attemptCount() + 1
-        );
+        OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_ATTEMPT_STARTED)
+                .put(LoggingConstants.JOB_ID, claimed.jobId())
+                .put(LoggingConstants.ISSUE_ID, claimed.issueId())
+                .put(LoggingConstants.IDEMPOTENCY_KEY, claimed.idempotencyKey())
+                .put(LoggingConstants.ATTEMPT_COUNT, claimed.attemptCount() + 1)
+                .info(LOGGER);
 
+        long startedAt = System.nanoTime();
+        Integer httpStatus = null;
+        boolean timeoutOrNetworkFailure = false;
+        String errorMessage = null;
+        Integer retryAfterSeconds = null;
         try {
             SimulatedHttpResponse response = externalEscalationClient.notifyEscalation(
                     claimed.idempotencyKey(),
                     claimed.issueId()
             );
-            transactionTemplate.executeWithoutResult(status -> recordOutcome(
-                    claimed.jobId(),
-                    response.httpStatus(),
-                    response.timeoutOrNetworkFailure(),
-                    response.errorMessage(),
-                    response.retryAfterSeconds()
-            ));
+            httpStatus = response.httpStatus();
+            timeoutOrNetworkFailure = response.timeoutOrNetworkFailure();
+            errorMessage = response.errorMessage();
+            retryAfterSeconds = response.retryAfterSeconds();
         } catch (OutboundTimeoutException exception) {
-            transactionTemplate.executeWithoutResult(status -> recordOutcome(
-                    claimed.jobId(),
-                    null,
-                    true,
-                    OutboundConstants.SIMULATED_TIMEOUT,
-                    null
-            ));
+            timeoutOrNetworkFailure = true;
+            errorMessage = OutboundConstants.SIMULATED_TIMEOUT;
         }
+        long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+        Integer completedHttpStatus = httpStatus;
+        boolean completedTimeout = timeoutOrNetworkFailure;
+        String completedError = errorMessage;
+        Integer completedRetryAfter = retryAfterSeconds;
+        transactionTemplate.executeWithoutResult(status -> recordOutcome(
+                claimed.jobId(),
+                completedHttpStatus,
+                completedTimeout,
+                completedError,
+                completedRetryAfter,
+                durationMs
+        ));
     }
 
     private ClaimedOutboundJob claimJob(Long jobId) {
@@ -148,13 +164,13 @@ public class OutboundWorkerService {
             job.setNextAttemptAt(now);
             job.setUpdatedAt(now);
             outboundJobRepository.save(job);
-            LOGGER.info(
-                    "Reclaimed stale processing job jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                    job.getId(),
-                    job.getIssue().getId(),
-                    job.getIdempotencyKey(),
-                    job.getAttemptCount()
-            );
+            OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_RECLAIMED)
+                    .put(LoggingConstants.JOB_ID, job.getId())
+                    .put(LoggingConstants.ISSUE_ID, job.getIssue().getId())
+                    .put(LoggingConstants.IDEMPOTENCY_KEY, job.getIdempotencyKey())
+                    .put(LoggingConstants.ATTEMPT_COUNT, job.getAttemptCount())
+                    .put(LoggingConstants.JOB_STATUS, job.getStatus())
+                    .info(LOGGER);
         }
     }
 
@@ -163,7 +179,8 @@ public class OutboundWorkerService {
             Integer httpStatus,
             boolean networkOrTimeoutFailure,
             String errorMessage,
-            Integer retryAfterSeconds
+            Integer retryAfterSeconds,
+            long durationMs
     ) {
         OutboundJob job = outboundJobRepository.findById(jobId).orElseThrow();
         Issue issue = issueRepository.findById(job.getIssue().getId()).orElseThrow();
@@ -190,13 +207,16 @@ public class OutboundWorkerService {
             );
             outboundJobRepository.save(job);
             issueRepository.save(issue);
-            LOGGER.info(
-                    "Job succeeded jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                    job.getId(),
-                    issue.getId(),
-                    job.getIdempotencyKey(),
-                    attemptCount
-            );
+            OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_SUCCEEDED)
+                    .put(LoggingConstants.JOB_ID, job.getId())
+                    .put(LoggingConstants.ISSUE_ID, issue.getId())
+                    .put(LoggingConstants.IDEMPOTENCY_KEY, job.getIdempotencyKey())
+                    .put(LoggingConstants.ATTEMPT_COUNT, attemptCount)
+                    .put(LoggingConstants.HTTP_STATUS, httpStatus)
+                    .put(LoggingConstants.DURATION_MS, durationMs)
+                    .put(LoggingConstants.JOB_STATUS, job.getStatus())
+                    .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_SUCCESS)
+                    .info(LOGGER);
             return;
         }
 
@@ -225,21 +245,31 @@ public class OutboundWorkerService {
             outboundJobRepository.save(job);
             issueRepository.save(issue);
             if (!retryable) {
-                LOGGER.info(
-                        "Non-retryable failure jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                        job.getId(),
-                        issue.getId(),
-                        job.getIdempotencyKey(),
-                        attemptCount
-                );
+                OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_NON_RETRYABLE_FAILURE)
+                        .put(LoggingConstants.JOB_ID, job.getId())
+                        .put(LoggingConstants.ISSUE_ID, issue.getId())
+                        .put(LoggingConstants.IDEMPOTENCY_KEY, job.getIdempotencyKey())
+                        .put(LoggingConstants.ATTEMPT_COUNT, attemptCount)
+                        .put(LoggingConstants.HTTP_STATUS, httpStatus)
+                        .put(LoggingConstants.DURATION_MS, durationMs)
+                        .put(LoggingConstants.FAILURE_CLASS, failureClass(httpStatus, networkOrTimeoutFailure))
+                        .put(LoggingConstants.RETRYABLE, false)
+                        .put(LoggingConstants.JOB_STATUS, job.getStatus())
+                        .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_FAILED_NON_RETRYABLE)
+                        .info(LOGGER);
             } else {
-                LOGGER.info(
-                        "Retry attempts exhausted jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                        job.getId(),
-                        issue.getId(),
-                        job.getIdempotencyKey(),
-                        attemptCount
-                );
+                OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_ATTEMPTS_EXHAUSTED)
+                        .put(LoggingConstants.JOB_ID, job.getId())
+                        .put(LoggingConstants.ISSUE_ID, issue.getId())
+                        .put(LoggingConstants.IDEMPOTENCY_KEY, job.getIdempotencyKey())
+                        .put(LoggingConstants.ATTEMPT_COUNT, attemptCount)
+                        .put(LoggingConstants.HTTP_STATUS, httpStatus)
+                        .put(LoggingConstants.DURATION_MS, durationMs)
+                        .put(LoggingConstants.FAILURE_CLASS, failureClass(httpStatus, networkOrTimeoutFailure))
+                        .put(LoggingConstants.RETRYABLE, true)
+                        .put(LoggingConstants.JOB_STATUS, job.getStatus())
+                        .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_FAILED_EXHAUSTED)
+                        .info(LOGGER);
             }
             return;
         }
@@ -259,20 +289,30 @@ public class OutboundWorkerService {
         );
         outboundJobRepository.save(job);
         issueRepository.save(issue);
-        LOGGER.info(
-                "Retryable failure jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                job.getId(),
-                issue.getId(),
-                job.getIdempotencyKey(),
-                attemptCount
-        );
-        LOGGER.info(
-                "Retry scheduled jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                job.getId(),
-                issue.getId(),
-                job.getIdempotencyKey(),
-                attemptCount
-        );
+        String classifiedFailure = failureClass(httpStatus, networkOrTimeoutFailure);
+        long nextAttemptDelaySeconds = Duration.between(now, nextAttemptAt).getSeconds();
+        OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_RETRYABLE_FAILURE)
+                .put(LoggingConstants.JOB_ID, job.getId())
+                .put(LoggingConstants.ISSUE_ID, issue.getId())
+                .put(LoggingConstants.IDEMPOTENCY_KEY, job.getIdempotencyKey())
+                .put(LoggingConstants.ATTEMPT_COUNT, attemptCount)
+                .put(LoggingConstants.HTTP_STATUS, httpStatus)
+                .put(LoggingConstants.DURATION_MS, durationMs)
+                .put(LoggingConstants.FAILURE_CLASS, classifiedFailure)
+                .put(LoggingConstants.RETRYABLE, true)
+                .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_RETRY_SCHEDULED)
+                .info(LOGGER);
+        OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_RETRY_SCHEDULED)
+                .put(LoggingConstants.JOB_ID, job.getId())
+                .put(LoggingConstants.ISSUE_ID, issue.getId())
+                .put(LoggingConstants.IDEMPOTENCY_KEY, job.getIdempotencyKey())
+                .put(LoggingConstants.ATTEMPT_COUNT, attemptCount)
+                .put(LoggingConstants.HTTP_STATUS, httpStatus)
+                .put(LoggingConstants.FAILURE_CLASS, classifiedFailure)
+                .put(LoggingConstants.NEXT_ATTEMPT_DELAY_SECONDS, nextAttemptDelaySeconds)
+                .put(LoggingConstants.JOB_STATUS, job.getStatus())
+                .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_RETRY_SCHEDULED)
+                .info(LOGGER);
     }
 
     private void addHistory(
@@ -289,6 +329,22 @@ public class OutboundWorkerService {
         history.setDescription(description);
         history.setCreatedAt(retryPolicy.now());
         issue.addHistory(history);
+    }
+
+    private static String failureClass(Integer httpStatus, boolean networkOrTimeoutFailure) {
+        if (networkOrTimeoutFailure || httpStatus == null) {
+            return LoggingConstants.FAILURE_CLASS_TIMEOUT;
+        }
+        if (httpStatus == RetryClassificationConstants.HTTP_429) {
+            return LoggingConstants.FAILURE_CLASS_HTTP_429;
+        }
+        if (httpStatus >= 500) {
+            return LoggingConstants.FAILURE_CLASS_HTTP_5XX;
+        }
+        if (httpStatus >= 400) {
+            return LoggingConstants.FAILURE_CLASS_HTTP_4XX;
+        }
+        return LoggingConstants.FAILURE_CLASS_HTTP_OTHER;
     }
 
     private static String failureReason(Integer httpStatus, boolean networkOrTimeoutFailure) {

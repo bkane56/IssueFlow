@@ -108,6 +108,7 @@ Standalone Spring Boot REST service in `backend/`. Maven Wrapper, JUnit 5, and S
 - A scheduled worker processes durable outbound jobs after commit
 - Jakarta Bean Validation at the API boundary
 - Centralized JSON error responses
+- Log4j2 structured JSON logs for HTTP, issue workflow, and outbound retries
 - SQLite persistence with automatic seed data on first start
 
 ## Technology stack
@@ -115,10 +116,11 @@ Standalone Spring Boot REST service in `backend/`. Maven Wrapper, JUnit 5, and S
 | Layer | Stack |
 |---|---|
 | Frontend service | React 19, TypeScript, Vite, React Router, Yarn, Vitest, React Testing Library |
-| Backend service | Java 17, Spring Boot 3.4, Spring Web, Spring Data JPA, Jakarta Validation, Maven |
+| Backend service | Java 17, Spring Boot 3.4, Spring Web, Spring Data JPA, Jakarta Validation, Maven, Log4j2 |
 | Persistence | SQLite, Hibernate |
 | API contract | REST / JSON, springdoc OpenAPI, Swagger UI |
 | Tests | JUnit 5, Mockito, Spring Boot Test, Vitest |
+| Logs | Log4j2 JSON (Logstash format) on stdout for Splunk or New Relic style dashboards |
 
 ## What the application does
 
@@ -376,6 +378,75 @@ Default simulation mode is `FAIL_ONCE_THEN_SUCCEED`. Use an open issue on the Is
 7. Restart durability: trigger with the default fail-once mode, wait until the job is `RETRY_SCHEDULED`, stop the backend, start it again, and wait for the worker to complete the next attempt.
 
 Do not wait on automated tests for real backoff intervals. Tests invoke the worker directly.
+
+## Operational logs
+
+The backend uses Log4j2 and writes one JSON object per line to stdout in Logstash format. Each operational event has a stable `event` name and low-cardinality fields so a log platform can chart rates, latency, and failure mix without parsing free-form text.
+
+The demo does not ship Splunk, New Relic, or an APM agent. Point those tools at stdout, a file, or a collector when you want dashboards.
+
+Correlation:
+
+- `requestId` is set for the life of an HTTP request and appears on logs emitted during that request.
+- Outbound worker attempts are async, so they correlate on `jobId`, `issueId`, and `idempotencyKey` rather than `requestId`.
+
+HTTP:
+
+| Event | When | Dashboard use |
+|---|---|---|
+| `http.request` | After each API request | Request rate, error rate, and latency by `httpRoute` |
+| `http.error` | Unexpected 500s | 5xx count by `exceptionClass` |
+
+Successful `GET` polling of outbound jobs is logged at DEBUG so a 2-second UI refresh does not dominate request volume. Swagger UI, OpenAPI docs, favicon, and CORS preflight are not logged.
+
+Issue workflow:
+
+| Event | Useful fields |
+|---|---|
+| `issue.created` | `category`, `severity`, `priority`, `customerFacing`, `productionImpact` |
+| `issue.status_changed` | `statusFrom`, `statusTo` |
+| `issue.assigned` | `assigned` (true or false, not a person name) |
+| `issue.triage_recalculated` | `priority`, `priorityChanged` |
+| `issue.deleted` | `issueId` |
+
+Outbound notification:
+
+| Event | Useful fields |
+|---|---|
+| `outbound.job.created` | `jobId`, `issueId`, `idempotencyKey`, `attemptCount` |
+| `outbound.job.duplicate` | same identifiers, `outcome=DUPLICATE` |
+| `outbound.job.rejected` | `reason=ISSUE_CLOSED` |
+| `outbound.worker.claimed` | `claimedCount` when at least one job is due |
+| `outbound.job.attempt_started` | `attemptCount` |
+| `outbound.job.retryable_failure` | `httpStatus`, `failureClass`, `durationMs` |
+| `outbound.job.retry_scheduled` | `nextAttemptDelaySeconds`, `failureClass` |
+| `outbound.job.non_retryable_failure` | `failureClass`, `outcome=FAILED_NON_RETRYABLE` |
+| `outbound.job.attempts_exhausted` | `attemptCount`, `outcome=FAILED_EXHAUSTED` |
+| `outbound.job.succeeded` | `httpStatus`, `durationMs`, `attemptCount` |
+| `outbound.job.reclaimed` | stale `PROCESSING` jobs returned to the queue |
+
+`failureClass` is one of `TIMEOUT`, `HTTP_429`, `HTTP_5XX`, `HTTP_4XX`, or `HTTP_OTHER`.
+
+Logs never include issue titles, descriptions, request bodies, or assignee names.
+
+Example Splunk searches:
+
+```text
+event=http.request | timechart count by outcome
+event=http.request | stats avg(durationMs) perc95(durationMs) by httpRoute
+event=outbound.job.retryable_failure OR event=outbound.job.non_retryable_failure OR event=outbound.job.attempts_exhausted | stats count by failureClass
+event=outbound.job.succeeded | stats avg(durationMs) avg(attemptCount)
+event=outbound.job.duplicate | timechart count
+```
+
+Example New Relic NRQL:
+
+```text
+SELECT count(*) FROM Log WHERE event = 'http.request' FACET outcome TIMESERIES
+SELECT average(durationMs), percentile(durationMs, 95) FROM Log WHERE event = 'http.request' FACET httpRoute
+SELECT count(*) FROM Log WHERE event LIKE 'outbound.job.%' FACET outcome
+SELECT average(durationMs) FROM Log WHERE event = 'outbound.job.succeeded'
+```
 
 ## Configuration
 
