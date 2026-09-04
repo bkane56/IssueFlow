@@ -34,7 +34,7 @@ public class IssueHistory {
     private Issue issue;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 40)
+    @Column(nullable = false, length = 60, columnDefinition = "varchar(60) not null")
     private HistoryEventType eventType;
 
     @Column(length = 255)

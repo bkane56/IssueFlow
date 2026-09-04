@@ -24,3 +24,19 @@ springdoc:
     operations-sorter: method
   api-docs:
     path: /v3/api-docs
+
+issueflow:
+  outbound:
+    max-attempts: 5
+    backoff-seconds:
+      - 5
+      - 15
+      - 45
+      - 120
+    stale-processing-timeout-seconds: 30
+    retry-after-max-seconds: 120
+    worker:
+      interval-ms: 2000
+      enabled: true
+    simulation:
+      mode: FAIL_ONCE_THEN_SUCCEED

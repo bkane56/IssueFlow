@@ -8,16 +8,20 @@ import com.issueflow.dto.request.CreateIssueRequest;
 import com.issueflow.dto.request.UpdateIssueRequest;
 import com.issueflow.dto.response.IssueHistoryResponse;
 import com.issueflow.dto.response.IssueResponse;
+import com.issueflow.dto.response.OutboundJobResponse;
 import com.issueflow.dto.response.PriorityChangeResponse;
 import com.issueflow.dto.response.TriageResultResponse;
 import com.issueflow.entity.HistoryEventType;
 import com.issueflow.entity.Category;
 import com.issueflow.entity.IssueStatus;
+import com.issueflow.entity.OutboundJobStatus;
+import com.issueflow.entity.OutboundOperationType;
 import com.issueflow.entity.Priority;
 import com.issueflow.entity.Severity;
 import com.issueflow.exception.InvalidStateTransitionException;
 import com.issueflow.exception.ResourceNotFoundException;
 import com.issueflow.service.IssueService;
+import com.issueflow.service.OutboundNotificationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -49,6 +53,9 @@ class IssueControllerTest {
 
     @MockitoBean
     private IssueService issueService;
+
+    @MockitoBean
+    private OutboundNotificationService outboundNotificationService;
 
     @Test
     void listsIssues() throws Exception {
@@ -269,6 +276,77 @@ class IssueControllerTest {
                         )
                 ))
                 .andExpect(jsonPath("$.path").value("/api/issues/10/status"));
+    }
+
+    @Test
+    void queuesEscalationNotification() throws Exception {
+        when(outboundNotificationService.enqueueEscalation(10L)).thenReturn(sampleOutboundJob());
+
+        mockMvc.perform(post("/api/issues/10/escalation-notification"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.jobId").value(21))
+                .andExpect(jsonPath("$.idempotencyKey").value("ESCALATION_NOTIFICATION:10"))
+                .andExpect(jsonPath("$.status").value("PENDING"));
+    }
+
+    @Test
+    void returnsExistingJobForDuplicateEscalationTrigger() throws Exception {
+        when(outboundNotificationService.enqueueEscalation(10L)).thenReturn(sampleOutboundJob());
+
+        mockMvc.perform(post("/api/issues/10/escalation-notification"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.jobId").value(21));
+        mockMvc.perform(post("/api/issues/10/escalation-notification"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.jobId").value(21));
+    }
+
+    @Test
+    void listsOutboundJobsForIssue() throws Exception {
+        when(outboundNotificationService.findByIssueId(10L)).thenReturn(List.of(sampleOutboundJob()));
+
+        mockMvc.perform(get("/api/issues/10/outbound-jobs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].jobId").value(21))
+                .andExpect(jsonPath("$[0].status").value("PENDING"));
+    }
+
+    @Test
+    void returnsNotFoundWhenEscalatingMissingIssue() throws Exception {
+        when(outboundNotificationService.enqueueEscalation(1042L))
+                .thenThrow(new ResourceNotFoundException(ErrorConstants.ISSUE_NOT_FOUND.formatted(1042L)));
+
+        mockMvc.perform(post("/api/issues/1042/escalation-notification"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value(ErrorConstants.ISSUE_NOT_FOUND.formatted(1042L)));
+    }
+
+    @Test
+    void returnsConflictWhenEscalatingClosedIssue() throws Exception {
+        when(outboundNotificationService.enqueueEscalation(10L))
+                .thenThrow(new InvalidStateTransitionException(ErrorConstants.ESCALATION_NOT_ALLOWED_FOR_CLOSED_ISSUE));
+
+        mockMvc.perform(post("/api/issues/10/escalation-notification"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value(ErrorConstants.ESCALATION_NOT_ALLOWED_FOR_CLOSED_ISSUE));
+    }
+
+    private OutboundJobResponse sampleOutboundJob() {
+        Instant queuedAt = Instant.parse("2026-09-04T12:00:00Z");
+        return new OutboundJobResponse(
+                21L,
+                OutboundOperationType.ESCALATION_NOTIFICATION,
+                "ESCALATION_NOTIFICATION:10",
+                OutboundJobStatus.PENDING,
+                0,
+                queuedAt,
+                null,
+                null,
+                queuedAt,
+                queuedAt,
+                null
+        );
     }
 
     private IssueResponse sampleIssue() {

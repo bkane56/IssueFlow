@@ -1,16 +1,20 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { enqueueEscalationNotification, listOutboundJobs } from '../api/outboundApi'
 import { assignIssue, changeIssueStatus, getIssue, getIssueHistory, recalculateTriage } from '../api/issuesApi'
 import { listUsers } from '../api/usersApi'
 import { Badge } from '../components/Badge'
 import { HistoryTimeline } from '../components/HistoryTimeline'
+import { OutboundNotificationPanel } from '../components/OutboundNotificationPanel'
 import { StatusMessage } from '../components/StatusMessage'
 import { TriageExplanation } from '../components/TriageExplanation'
 import { NEXT_STATUS, STATUS_LABELS } from '../constants/labels'
+import { OUTBOUND_IN_FLIGHT_STATUSES, OUTBOUND_POLL_INTERVAL_MS } from '../constants/outbound'
 import { issueEditPath } from '../constants/routes'
 import { useAsync } from '../hooks/useAsync'
 import { useDocumentTitle } from '../hooks/useDocumentTitle'
 import type { Priority } from '../types/issue'
+import type { OutboundJobStatus } from '../types/outbound'
 import { formatBoolean, formatDateTime } from '../utils/format'
 
 export function IssueDetailPage() {
@@ -19,13 +23,42 @@ export function IssueDetailPage() {
   const issueQuery = useAsync(() => getIssue(issueId), [issueId])
   const historyQuery = useAsync(() => getIssueHistory(issueId), [issueId])
   const usersQuery = useAsync(listUsers, [])
+  const jobsQuery = useAsync(() => listOutboundJobs(issueId), [issueId])
   const [actionError, setActionError] = useState<string | null>(null)
+  const [triggerError, setTriggerError] = useState<string | null>(null)
+  const [triggering, setTriggering] = useState(false)
   const [previousPriority, setPreviousPriority] = useState<Priority | null>(null)
+  const previousOutboundStatus = useRef<OutboundJobStatus | undefined>(undefined)
 
   const issue = issueQuery.data
   const nextStatus = issue ? NEXT_STATUS[issue.status] : undefined
   const pageTitle = issue ? `${issue.title} - IssueFlow` : 'Issue detail - IssueFlow'
   useDocumentTitle(pageTitle)
+
+  const outboundJob = jobsQuery.data?.[0] ?? null
+  const outboundStatus = outboundJob?.status
+
+  useEffect(() => {
+    if (!outboundStatus || !OUTBOUND_IN_FLIGHT_STATUSES.includes(outboundStatus)) {
+      return
+    }
+    const intervalId = window.setInterval(() => {
+      void jobsQuery.reload()
+    }, OUTBOUND_POLL_INTERVAL_MS)
+    return () => window.clearInterval(intervalId)
+  }, [outboundStatus, jobsQuery.reload])
+
+  useEffect(() => {
+    const previous = previousOutboundStatus.current
+    previousOutboundStatus.current = outboundStatus
+    if (
+      previous &&
+      previous !== outboundStatus &&
+      (outboundStatus === 'SUCCEEDED' || outboundStatus === 'FAILED')
+    ) {
+      void historyQuery.reload()
+    }
+  }, [outboundStatus, historyQuery.reload])
 
   async function handleStatusChange() {
     if (!issue || !nextStatus) {
@@ -65,6 +98,22 @@ export function IssueDetailPage() {
       await historyQuery.reload()
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : 'Unable to recalculate triage')
+    }
+  }
+
+  async function handleTriggerEscalation() {
+    if (!issue) {
+      return
+    }
+    try {
+      setTriggerError(null)
+      setTriggering(true)
+      jobsQuery.setData([await enqueueEscalationNotification(issue.id)])
+      await historyQuery.reload()
+    } catch (cause) {
+      setTriggerError(cause instanceof Error ? cause.message : 'Unable to queue escalation notification')
+    } finally {
+      setTriggering(false)
     }
   }
 
@@ -161,6 +210,18 @@ export function IssueDetailPage() {
           </section>
 
           <TriageExplanation triage={issue.triage} previousPriority={previousPriority} />
+
+          <OutboundNotificationPanel
+            jobs={jobsQuery.data}
+            loading={jobsQuery.loading}
+            error={jobsQuery.error}
+            triggering={triggering}
+            canTrigger={issue.status !== 'CLOSED'}
+            closedIssue={issue.status === 'CLOSED'}
+            triggerError={triggerError}
+            onTrigger={() => void handleTriggerEscalation()}
+            onRefresh={() => void jobsQuery.reload()}
+          />
 
           <section className="panel">
             <h2>Issue history</h2>

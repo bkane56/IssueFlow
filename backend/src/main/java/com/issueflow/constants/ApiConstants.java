@@ -10,6 +10,9 @@ public final class ApiConstants {
     public static final String ISSUE_ASSIGN_PATH = "/{id}/assign";
     public static final String ISSUE_TRIAGE_PATH = "/{id}/triage";
     public static final String ISSUE_HISTORY_PATH = "/{id}/history";
+    public static final String ISSUE_ESCALATION_NOTIFICATION_PATH = "/{id}/escalation-notification";
+    public static final String ISSUE_OUTBOUND_JOBS_PATH = "/{id}/outbound-jobs";
+    public static final String OUTBOUND_JOBS_PATH = "/outbound-jobs";
     public static final String CORS_LOCAL_ORIGIN = "http://localhost:3000";
 
     private ApiConstants() {

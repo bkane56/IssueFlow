@@ -72,6 +72,8 @@ public class Issue {
     @Column(nullable = false)
     private int affectedUsers;
 
+    private Instant escalationRequestedAt;
+
     @Column(nullable = false)
     private Instant createdAt;
 

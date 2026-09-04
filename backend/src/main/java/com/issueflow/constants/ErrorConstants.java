@@ -9,6 +9,9 @@ public final class ErrorConstants {
     public static final String VALIDATION_FAILED = "Validation failed";
     public static final String INVALID_REQUEST_BODY = "Request body is invalid or contains an unsupported value";
     public static final String UNEXPECTED_ERROR = "An unexpected error occurred";
+    public static final String OUTBOUND_JOB_NOT_FOUND = "Outbound job %s was not found";
+    public static final String ESCALATION_NOT_ALLOWED_FOR_CLOSED_ISSUE =
+            "Cannot queue an escalation notification for a closed issue";
 
     private ErrorConstants() {
     }
