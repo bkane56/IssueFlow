@@ -4,6 +4,7 @@ import { axe } from 'vitest-axe'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDashboard } from '../api/dashboardApi'
 import { getIssue, getIssueHistory, listIssues } from '../api/issuesApi'
+import { listOutboundJobs } from '../api/outboundApi'
 import { listUsers } from '../api/usersApi'
 import { sampleHistory, sampleIssue, sampleUser } from './fixtures'
 import { DashboardPage } from '../pages/DashboardPage'
@@ -26,6 +27,11 @@ vi.mock('../api/issuesApi', () => ({
   recalculateTriage: vi.fn(),
 }))
 
+vi.mock('../api/outboundApi', () => ({
+  listOutboundJobs: vi.fn(),
+  enqueueEscalationNotification: vi.fn(),
+}))
+
 vi.mock('../api/usersApi', () => ({
   listUsers: vi.fn(),
   createUser: vi.fn(),
@@ -43,6 +49,7 @@ describe('accessibility smoke tests', () => {
     vi.mocked(listUsers).mockResolvedValue([sampleUser])
     vi.mocked(getIssue).mockResolvedValue(sampleIssue)
     vi.mocked(getIssueHistory).mockResolvedValue(sampleHistory)
+    vi.mocked(listOutboundJobs).mockResolvedValue([])
   })
 
   it('DashboardPage has no axe violations after data loads', async () => {

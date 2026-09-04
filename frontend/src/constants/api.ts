@@ -4,6 +4,7 @@ export const API_PATHS = {
   issues: '/api/issues',
   users: '/api/users',
   dashboard: '/api/dashboard',
+  outboundJobs: '/api/outbound-jobs',
 } as const
 
 export const SWAGGER_URL = `${API_BASE_URL}/swagger-ui/index.html`

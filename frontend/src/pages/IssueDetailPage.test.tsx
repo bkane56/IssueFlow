@@ -3,8 +3,9 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getIssue, getIssueHistory, recalculateTriage, assignIssue, changeIssueStatus } from '../api/issuesApi'
+import { enqueueEscalationNotification, listOutboundJobs } from '../api/outboundApi'
 import { listUsers } from '../api/usersApi'
-import { issueWith, sampleHistory, sampleIssue, sampleUser } from '../test/fixtures'
+import { issueWith, sampleHistory, sampleIssue, sampleOutboundJob, sampleUser } from '../test/fixtures'
 import { IssueDetailPage } from './IssueDetailPage'
 
 vi.mock('../api/issuesApi', () => ({
@@ -13,6 +14,11 @@ vi.mock('../api/issuesApi', () => ({
   assignIssue: vi.fn(),
   changeIssueStatus: vi.fn(),
   recalculateTriage: vi.fn(),
+}))
+
+vi.mock('../api/outboundApi', () => ({
+  listOutboundJobs: vi.fn(),
+  enqueueEscalationNotification: vi.fn(),
 }))
 
 vi.mock('../api/usersApi', () => ({
@@ -24,6 +30,8 @@ describe('IssueDetailPage', () => {
     vi.mocked(getIssue).mockResolvedValue(sampleIssue)
     vi.mocked(getIssueHistory).mockResolvedValue(sampleHistory)
     vi.mocked(listUsers).mockResolvedValue([sampleUser])
+    vi.mocked(listOutboundJobs).mockResolvedValue([])
+    vi.mocked(enqueueEscalationNotification).mockResolvedValue(sampleOutboundJob)
     vi.mocked(recalculateTriage).mockResolvedValue({
       previousPriority: 'P3',
       currentPriority: 'P1',
@@ -119,5 +127,40 @@ describe('IssueDetailPage', () => {
     )
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Issue 1042 was not found')
+  })
+
+  it('queues an escalation notification and shows job status', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/issues/10']}>
+        <Routes>
+          <Route path="/issues/:id" element={<IssueDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Queue escalation notification' }))
+
+    expect(enqueueEscalationNotification).toHaveBeenCalledWith(10)
+    expect(await screen.findByText('Pending')).toBeInTheDocument()
+    expect(screen.getByText('ESCALATION_NOTIFICATION:10')).toBeInTheDocument()
+  })
+
+  it('shows a trigger error without applying retry logic in the page', async () => {
+    const user = userEvent.setup()
+    vi.mocked(enqueueEscalationNotification).mockRejectedValue(new Error('Cannot queue an escalation notification for a closed issue'))
+
+    render(
+      <MemoryRouter initialEntries={['/issues/10']}>
+        <Routes>
+          <Route path="/issues/:id" element={<IssueDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await user.click(await screen.findByRole('button', { name: 'Queue escalation notification' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Cannot queue an escalation notification for a closed issue',
+    )
   })
 })

@@ -1,9 +1,10 @@
-import { CATEGORY_LABELS, PRIORITY_LABELS, SEVERITY_LABELS, STATUS_LABELS } from '../constants/labels'
+import { CATEGORY_LABELS, OUTBOUND_JOB_STATUS_LABELS, PRIORITY_LABELS, SEVERITY_LABELS, STATUS_LABELS } from '../constants/labels'
 import type { Category, IssueStatus, Priority, Severity } from '../types/issue'
+import type { OutboundJobStatus } from '../types/outbound'
 
 interface BadgeProps {
-  kind: 'priority' | 'severity' | 'status' | 'category'
-  value: Priority | Severity | IssueStatus | Category
+  kind: 'priority' | 'severity' | 'status' | 'category' | 'outbound'
+  value: Priority | Severity | IssueStatus | Category | OutboundJobStatus
 }
 
 function labelFor(kind: BadgeProps['kind'], value: BadgeProps['value']): string {
@@ -15,6 +16,9 @@ function labelFor(kind: BadgeProps['kind'], value: BadgeProps['value']): string 
   }
   if (kind === 'status') {
     return STATUS_LABELS[value as IssueStatus]
+  }
+  if (kind === 'outbound') {
+    return OUTBOUND_JOB_STATUS_LABELS[value as OutboundJobStatus]
   }
   return CATEGORY_LABELS[value as Category]
 }

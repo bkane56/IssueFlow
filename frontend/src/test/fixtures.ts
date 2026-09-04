@@ -1,4 +1,5 @@
 import type { Issue, IssueHistory, TriageResult } from '../types/issue'
+import type { OutboundJob } from '../types/outbound'
 import type { User } from '../types/user'
 
 export const sampleUser: User = {
@@ -38,6 +39,24 @@ export const sampleIssue: Issue = {
 
 export function issueWith(overrides: Partial<Issue>): Issue {
   return { ...sampleIssue, ...overrides }
+}
+
+export const sampleOutboundJob: OutboundJob = {
+  jobId: 21,
+  operationType: 'ESCALATION_NOTIFICATION',
+  idempotencyKey: 'ESCALATION_NOTIFICATION:10',
+  status: 'PENDING',
+  attemptCount: 0,
+  nextAttemptAt: '2026-09-04T12:00:05Z',
+  lastHttpStatus: null,
+  lastError: null,
+  createdAt: '2026-09-04T12:00:00Z',
+  updatedAt: '2026-09-04T12:00:00Z',
+  completedAt: null,
+}
+
+export function outboundJobWith(overrides: Partial<OutboundJob>): OutboundJob {
+  return { ...sampleOutboundJob, ...overrides }
 }
 
 export const sampleHistory: IssueHistory[] = [

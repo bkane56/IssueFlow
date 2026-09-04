@@ -1,4 +1,5 @@
 import type { Category, IssueStatus, Priority, Severity } from '../types/issue'
+import type { OutboundJobStatus } from '../types/outbound'
 
 export const STATUS_OPTIONS: IssueStatus[] = ['NEW', 'TRIAGED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
 export const PRIORITY_OPTIONS: Priority[] = ['P1', 'P2', 'P3', 'P4']
@@ -50,4 +51,12 @@ export const NEXT_STATUS: Partial<Record<IssueStatus, IssueStatus>> = {
   TRIAGED: 'IN_PROGRESS',
   IN_PROGRESS: 'RESOLVED',
   RESOLVED: 'CLOSED',
+}
+
+export const OUTBOUND_JOB_STATUS_LABELS: Record<OutboundJobStatus, string> = {
+  PENDING: 'Pending',
+  PROCESSING: 'Processing',
+  RETRY_SCHEDULED: 'Retry scheduled',
+  SUCCEEDED: 'Succeeded',
+  FAILED: 'Failed',
 }

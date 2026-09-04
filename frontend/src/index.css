@@ -278,6 +278,27 @@ textarea {
   color: #166534;
 }
 
+.badge-pending,
+.badge-processing {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.badge-retry-scheduled {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-succeeded {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .badge-frontend,
 .badge-backend,
 .badge-database,
@@ -305,6 +326,24 @@ textarea {
 .button-secondary {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+.button-primary:disabled,
+.button-secondary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.panel-header h2 {
+  margin-bottom: 0;
 }
 
 .status-message {

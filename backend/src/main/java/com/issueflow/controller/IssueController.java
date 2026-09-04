@@ -7,12 +7,14 @@ import com.issueflow.dto.request.CreateIssueRequest;
 import com.issueflow.dto.request.UpdateIssueRequest;
 import com.issueflow.dto.response.IssueHistoryResponse;
 import com.issueflow.dto.response.IssueResponse;
+import com.issueflow.dto.response.OutboundJobResponse;
 import com.issueflow.dto.response.PriorityChangeResponse;
 import com.issueflow.entity.Category;
 import com.issueflow.entity.IssueStatus;
 import com.issueflow.entity.Priority;
 import com.issueflow.entity.Severity;
 import com.issueflow.service.IssueService;
+import com.issueflow.service.OutboundNotificationService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -34,9 +36,11 @@ import java.util.List;
 public class IssueController {
 
     private final IssueService issueService;
+    private final OutboundNotificationService outboundNotificationService;
 
-    public IssueController(IssueService issueService) {
+    public IssueController(IssueService issueService, OutboundNotificationService outboundNotificationService) {
         this.issueService = issueService;
+        this.outboundNotificationService = outboundNotificationService;
     }
 
     @GetMapping
@@ -91,5 +95,15 @@ public class IssueController {
     @GetMapping(ApiConstants.ISSUE_HISTORY_PATH)
     public List<IssueHistoryResponse> history(@PathVariable Long id) {
         return issueService.findHistory(id);
+    }
+
+    @PostMapping(ApiConstants.ISSUE_ESCALATION_NOTIFICATION_PATH)
+    public OutboundJobResponse enqueueEscalation(@PathVariable Long id) {
+        return outboundNotificationService.enqueueEscalation(id);
+    }
+
+    @GetMapping(ApiConstants.ISSUE_OUTBOUND_JOBS_PATH)
+    public List<OutboundJobResponse> outboundJobs(@PathVariable Long id) {
+        return outboundNotificationService.findByIssueId(id);
     }
 }
