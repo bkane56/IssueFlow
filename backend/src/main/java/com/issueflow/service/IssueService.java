@@ -1,6 +1,7 @@
 package com.issueflow.service;
 
 import com.issueflow.constants.ErrorConstants;
+import com.issueflow.constants.LoggingConstants;
 import com.issueflow.dto.request.AssignIssueRequest;
 import com.issueflow.dto.request.ChangeStatusRequest;
 import com.issueflow.dto.request.CreateIssueRequest;
@@ -18,11 +19,14 @@ import com.issueflow.entity.Severity;
 import com.issueflow.entity.User;
 import com.issueflow.exception.InvalidStateTransitionException;
 import com.issueflow.exception.ResourceNotFoundException;
+import com.issueflow.logging.OperationalLog;
 import com.issueflow.mapper.IssueHistoryMapper;
 import com.issueflow.mapper.IssueMapper;
 import com.issueflow.repository.IssueHistoryRepository;
 import com.issueflow.repository.IssueRepository;
 import com.issueflow.repository.IssueSpecifications;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +39,8 @@ import java.util.Objects;
 @Service
 @Transactional
 public class IssueService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(IssueService.class);
 
     private final IssueRepository issueRepository;
     private final IssueHistoryRepository issueHistoryRepository;
@@ -100,7 +106,16 @@ public class IssueService {
         issue.setUpdatedAt(now);
         applyTriage(issue);
         addHistory(issue, HistoryEventType.ISSUE_CREATED, null, issue.getStatus().name(), "Issue created");
-        return toResponse(issueRepository.save(issue));
+        Issue saved = issueRepository.save(issue);
+        OperationalLog.event(LoggingConstants.EVENT_ISSUE_CREATED)
+                .put(LoggingConstants.ISSUE_ID, saved.getId())
+                .put(LoggingConstants.CATEGORY, saved.getCategory())
+                .put(LoggingConstants.SEVERITY, saved.getSeverity())
+                .put(LoggingConstants.PRIORITY, saved.getPriority())
+                .put(LoggingConstants.CUSTOMER_FACING, saved.isCustomerFacing())
+                .put(LoggingConstants.PRODUCTION_IMPACT, saved.isProductionImpact())
+                .info(LOGGER);
+        return toResponse(saved);
     }
 
     public IssueResponse update(Long id, UpdateIssueRequest request) {
@@ -131,6 +146,9 @@ public class IssueService {
 
     public void delete(Long id) {
         issueRepository.delete(getIssue(id));
+        OperationalLog.event(LoggingConstants.EVENT_ISSUE_DELETED)
+                .put(LoggingConstants.ISSUE_ID, id)
+                .info(LOGGER);
     }
 
     public IssueResponse changeStatus(Long id, ChangeStatusRequest request) {
@@ -150,7 +168,13 @@ public class IssueService {
                 next.name(),
                 "Status changed from %s to %s".formatted(current, next)
         );
-        return toResponse(issueRepository.save(issue));
+        Issue saved = issueRepository.save(issue);
+        OperationalLog.event(LoggingConstants.EVENT_ISSUE_STATUS_CHANGED)
+                .put(LoggingConstants.ISSUE_ID, saved.getId())
+                .put(LoggingConstants.STATUS_FROM, current)
+                .put(LoggingConstants.STATUS_TO, next)
+                .info(LOGGER);
+        return toResponse(saved);
     }
 
     public IssueResponse assign(Long id, AssignIssueRequest request) {
@@ -172,7 +196,12 @@ public class IssueService {
                 nextAssignee,
                 "Assignee changed"
         );
-        return toResponse(issueRepository.save(issue));
+        Issue saved = issueRepository.save(issue);
+        OperationalLog.event(LoggingConstants.EVENT_ISSUE_ASSIGNED)
+                .put(LoggingConstants.ISSUE_ID, saved.getId())
+                .put(LoggingConstants.ASSIGNED, nextUser != null)
+                .info(LOGGER);
+        return toResponse(saved);
     }
 
     public PriorityChangeResponse recalculateTriage(Long id) {
@@ -210,6 +239,13 @@ public class IssueService {
             issue.setUpdatedAt(Instant.now(clock));
         }
         Issue saved = issueRepository.save(issue);
+        if (priorityChanged || scoreChanged) {
+            OperationalLog.event(LoggingConstants.EVENT_ISSUE_TRIAGE_RECALCULATED)
+                    .put(LoggingConstants.ISSUE_ID, saved.getId())
+                    .put(LoggingConstants.PRIORITY, saved.getPriority())
+                    .put(LoggingConstants.PRIORITY_CHANGED, priorityChanged)
+                    .info(LOGGER);
+        }
         return new PriorityChangeResponse(previousPriority, saved.getPriority(), priorityChanged, toResponse(saved));
     }
 

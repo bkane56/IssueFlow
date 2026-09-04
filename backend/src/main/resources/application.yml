@@ -25,6 +25,20 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
+logging:
+  structured:
+    format:
+      console: logstash
+    json:
+      add:
+        service: issueflow
+  level:
+    root: INFO
+    com.issueflow: INFO
+    org.springframework: WARN
+    org.hibernate: WARN
+    org.springdoc: WARN
+
 issueflow:
   outbound:
     max-attempts: 5

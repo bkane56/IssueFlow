@@ -1,7 +1,10 @@
 package com.issueflow.exception;
 
+import com.issueflow.config.HttpRequestLoggingFilter;
 import com.issueflow.constants.ErrorConstants;
+import com.issueflow.constants.LoggingConstants;
 import com.issueflow.dto.response.ErrorResponse;
+import com.issueflow.logging.OperationalLog;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -96,7 +99,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception exception, HttpServletRequest request) {
-        LOGGER.error("Unexpected error while handling {}", request.getRequestURI(), exception);
+        OperationalLog.event(LoggingConstants.EVENT_HTTP_ERROR)
+                .put(LoggingConstants.HTTP_METHOD, request.getMethod())
+                .put(LoggingConstants.HTTP_ROUTE, HttpRequestLoggingFilter.resolveRoute(request))
+                .put(LoggingConstants.HTTP_STATUS, HttpStatus.INTERNAL_SERVER_ERROR.value())
+                .put(LoggingConstants.EXCEPTION_CLASS, exception.getClass().getSimpleName())
+                .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_SERVER_ERROR)
+                .error(LOGGER, exception);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, ErrorConstants.UNEXPECTED_ERROR, request);
     }
 

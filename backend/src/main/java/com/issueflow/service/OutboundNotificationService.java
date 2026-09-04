@@ -1,6 +1,7 @@
 package com.issueflow.service;
 
 import com.issueflow.constants.ErrorConstants;
+import com.issueflow.constants.LoggingConstants;
 import com.issueflow.constants.OutboundConstants;
 import com.issueflow.dto.response.OutboundJobResponse;
 import com.issueflow.entity.HistoryEventType;
@@ -12,6 +13,7 @@ import com.issueflow.entity.OutboundJobStatus;
 import com.issueflow.entity.OutboundOperationType;
 import com.issueflow.exception.InvalidStateTransitionException;
 import com.issueflow.exception.ResourceNotFoundException;
+import com.issueflow.logging.OperationalLog;
 import com.issueflow.mapper.OutboundJobMapper;
 import com.issueflow.repository.IssueRepository;
 import com.issueflow.repository.OutboundJobRepository;
@@ -51,12 +53,18 @@ public class OutboundNotificationService {
     public OutboundJobResponse enqueueEscalation(Long issueId) {
         Issue issue = getIssue(issueId);
         if (issue.getStatus() == IssueStatus.CLOSED) {
+            OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_REJECTED)
+                    .put(LoggingConstants.ISSUE_ID, issueId)
+                    .put(LoggingConstants.OPERATION_TYPE, OutboundOperationType.ESCALATION_NOTIFICATION)
+                    .put(LoggingConstants.REASON, LoggingConstants.REASON_ISSUE_CLOSED)
+                    .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_REJECTED)
+                    .warn(LOGGER);
             throw new InvalidStateTransitionException(ErrorConstants.ESCALATION_NOT_ALLOWED_FOR_CLOSED_ISSUE);
         }
 
         String idempotencyKey = OutboundOperationType.ESCALATION_NOTIFICATION.idempotencyKey(issueId);
         return outboundJobRepository.findByIdempotencyKey(idempotencyKey)
-                .map(outboundJobMapper::toResponse)
+                .map(this::logDuplicateAndMap)
                 .orElseGet(() -> createEscalationJob(issue, idempotencyKey));
     }
 
@@ -102,19 +110,33 @@ public class OutboundNotificationService {
 
         try {
             OutboundJob saved = outboundJobRepository.save(job);
-            LOGGER.info(
-                    "Job created jobId={} issueId={} idempotencyKey={} attemptCount={}",
-                    saved.getId(),
-                    issue.getId(),
-                    saved.getIdempotencyKey(),
-                    saved.getAttemptCount()
-            );
+            OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_CREATED)
+                    .put(LoggingConstants.JOB_ID, saved.getId())
+                    .put(LoggingConstants.ISSUE_ID, issue.getId())
+                    .put(LoggingConstants.IDEMPOTENCY_KEY, saved.getIdempotencyKey())
+                    .put(LoggingConstants.OPERATION_TYPE, saved.getOperationType())
+                    .put(LoggingConstants.JOB_STATUS, saved.getStatus())
+                    .put(LoggingConstants.ATTEMPT_COUNT, saved.getAttemptCount())
+                    .info(LOGGER);
             return outboundJobMapper.toResponse(saved);
         } catch (DataIntegrityViolationException exception) {
             return outboundJobRepository.findByIdempotencyKey(idempotencyKey)
-                    .map(outboundJobMapper::toResponse)
+                    .map(this::logDuplicateAndMap)
                     .orElseThrow(() -> exception);
         }
+    }
+
+    private OutboundJobResponse logDuplicateAndMap(OutboundJob existing) {
+        OperationalLog.event(LoggingConstants.EVENT_OUTBOUND_JOB_DUPLICATE)
+                .put(LoggingConstants.JOB_ID, existing.getId())
+                .put(LoggingConstants.ISSUE_ID, existing.getIssue().getId())
+                .put(LoggingConstants.IDEMPOTENCY_KEY, existing.getIdempotencyKey())
+                .put(LoggingConstants.OPERATION_TYPE, existing.getOperationType())
+                .put(LoggingConstants.JOB_STATUS, existing.getStatus())
+                .put(LoggingConstants.ATTEMPT_COUNT, existing.getAttemptCount())
+                .put(LoggingConstants.OUTCOME, LoggingConstants.OUTCOME_DUPLICATE)
+                .info(LOGGER);
+        return outboundJobMapper.toResponse(existing);
     }
 
     private Issue getIssue(Long issueId) {
