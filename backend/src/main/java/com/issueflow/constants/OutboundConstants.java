@@ -21,6 +21,7 @@ public final class OutboundConstants {
     public static final String FAILURE_TIMEOUT = "timeout";
     public static final String FAILURE_HTTP = "HTTP %s";
     public static final String SIMULATED_TIMEOUT = "Simulated connection timeout";
+    public static final String SIMULATED_CONNECTION_REFUSED = "Simulated connection refused";
     public static final String SIMULATED_HTTP_400 = "Simulated HTTP 400";
     public static final String SIMULATED_HTTP_429 = "Simulated HTTP 429";
     public static final String SIMULATED_HTTP_503 = "Simulated HTTP 503";

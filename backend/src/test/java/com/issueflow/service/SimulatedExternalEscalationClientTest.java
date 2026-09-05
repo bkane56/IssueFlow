@@ -5,6 +5,7 @@ import com.issueflow.constants.OutboundConstants;
 import com.issueflow.constants.RetryClassificationConstants;
 import com.issueflow.entity.OutboundSimulationMode;
 import com.issueflow.exception.OutboundTimeoutException;
+import com.issueflow.exception.OutboundTransportException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -77,6 +78,7 @@ class SimulatedExternalEscalationClientTest {
 
         assertThatThrownBy(() -> client.notifyEscalation("key-d", 8L))
                 .isInstanceOf(OutboundTimeoutException.class)
+                .isInstanceOf(OutboundTransportException.class)
                 .hasMessage(OutboundConstants.SIMULATED_TIMEOUT);
         assertThat(client.acceptedCount()).isZero();
     }

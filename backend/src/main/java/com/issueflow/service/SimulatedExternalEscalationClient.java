@@ -9,6 +9,13 @@ import org.springframework.stereotype.Component;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * In-process stand-in for a remote escalation API.
+ * Attempt counters and accepted keys are process-local and reset on restart.
+ * A real HTTP client must translate transport-library exceptions into
+ * {@link com.issueflow.exception.OutboundTransportException} or
+ * {@link com.issueflow.exception.OutboundTimeoutException} before they leave this adapter.
+ */
 @Component
 public class SimulatedExternalEscalationClient implements ExternalEscalationClient {
 

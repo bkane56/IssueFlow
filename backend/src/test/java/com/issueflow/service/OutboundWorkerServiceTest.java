@@ -10,12 +10,17 @@ import com.issueflow.entity.OutboundJob;
 import com.issueflow.entity.OutboundJobStatus;
 import com.issueflow.entity.Severity;
 import com.issueflow.exception.OutboundTimeoutException;
+import com.issueflow.exception.OutboundTransportException;
 import com.issueflow.repository.IssueHistoryRepository;
 import com.issueflow.repository.OutboundJobRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +48,12 @@ class OutboundWorkerServiceTest {
 
     @Autowired
     private IssueHistoryRepository issueHistoryRepository;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @MockitoBean
     private ExternalEscalationClient externalEscalationClient;
@@ -194,24 +205,108 @@ class OutboundWorkerServiceTest {
     }
 
     @Test
-    void persistsRetryStateAcrossPersistenceContextClear() {
+    void continuesRetryFromPersistedStateAfterPersistenceContextReset() {
         stubResponses(
                 SimulatedHttpResponse.http(RetryClassificationConstants.HTTP_503, OutboundConstants.SIMULATED_HTTP_503),
                 SimulatedHttpResponse.success(true)
         );
-        Long issueId = createIssue("Worker restart durability");
+        Long issueId = createIssue("Worker persistence-context durability");
         Long jobId = outboundNotificationService.enqueueEscalation(issueId).jobId();
+
         outboundWorkerService.processDueJobs();
 
-        OutboundJob persisted = outboundJobRepository.findById(jobId).orElseThrow();
-        assertThat(persisted.getStatus()).isEqualTo(OutboundJobStatus.RETRY_SCHEDULED);
-        assertThat(persisted.getIdempotencyKey()).isEqualTo("ESCALATION_NOTIFICATION:" + issueId);
-        assertThat(persisted.getAttemptCount()).isEqualTo(1);
+        TransactionTemplate verification = new TransactionTemplate(transactionManager);
+        verification.executeWithoutResult(status -> {
+            OutboundJob managed = outboundJobRepository.findById(jobId).orElseThrow();
+            assertThat(managed.getStatus()).isEqualTo(OutboundJobStatus.RETRY_SCHEDULED);
+            assertThat(managed.getAttemptCount()).isEqualTo(1);
+            assertThat(managed.getNextAttemptAt()).isNotNull();
+            assertThat(managed.getLastError()).isEqualTo(OutboundConstants.SIMULATED_HTTP_503);
+            assertThat(managed.getIdempotencyKey()).isEqualTo("ESCALATION_NOTIFICATION:" + issueId);
+
+            Instant nextAttemptAt = managed.getNextAttemptAt();
+            String lastError = managed.getLastError();
+            String idempotencyKey = managed.getIdempotencyKey();
+
+            entityManager.flush();
+            entityManager.clear();
+
+            OutboundJob reloaded = outboundJobRepository.findById(jobId).orElseThrow();
+            assertThat(reloaded).isNotSameAs(managed);
+            assertThat(reloaded.getStatus()).isEqualTo(OutboundJobStatus.RETRY_SCHEDULED);
+            assertThat(reloaded.getAttemptCount()).isEqualTo(1);
+            assertThat(reloaded.getNextAttemptAt()).isEqualTo(nextAttemptAt);
+            assertThat(reloaded.getLastError()).isEqualTo(lastError);
+            assertThat(reloaded.getIdempotencyKey()).isEqualTo(idempotencyKey);
+        });
 
         makeDue(jobId);
         outboundWorkerService.processDueJobs();
         assertThat(outboundJobRepository.findById(jobId).orElseThrow().getStatus())
                 .isEqualTo(OutboundJobStatus.SUCCEEDED);
+        assertThat(outboundJobRepository.findById(jobId).orElseThrow().getAttemptCount()).isEqualTo(2);
+    }
+
+    @Test
+    void treatsTransportFailureAsRetryable() {
+        when(externalEscalationClient.notifyEscalation(anyString(), anyLong()))
+                .thenThrow(new OutboundTransportException(OutboundConstants.SIMULATED_CONNECTION_REFUSED));
+        Long issueId = createIssue("Worker transport retry");
+        Long jobId = outboundNotificationService.enqueueEscalation(issueId).jobId();
+
+        outboundWorkerService.processDueJobs();
+
+        OutboundJob job = outboundJobRepository.findById(jobId).orElseThrow();
+        assertThat(job.getStatus()).isEqualTo(OutboundJobStatus.RETRY_SCHEDULED);
+        assertThat(job.getAttemptCount()).isEqualTo(1);
+        assertThat(job.getLastHttpStatus()).isNull();
+        assertThat(job.getLastError()).isEqualTo(OutboundConstants.SIMULATED_CONNECTION_REFUSED);
+        assertThat(job.getNextAttemptAt()).isAfter(job.getLastAttemptAt());
+        assertThat(Duration.between(job.getLastAttemptAt(), job.getNextAttemptAt()))
+                .isEqualTo(Duration.ofSeconds(5));
+    }
+
+    @Test
+    void marksFailedWhenTransportRetriesAreExhausted() {
+        when(externalEscalationClient.notifyEscalation(anyString(), anyLong()))
+                .thenThrow(new OutboundTransportException(OutboundConstants.SIMULATED_CONNECTION_REFUSED));
+        Long issueId = createIssue("Worker transport exhaustion");
+        Long jobId = outboundNotificationService.enqueueEscalation(issueId).jobId();
+
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            outboundWorkerService.processDueJobs();
+            if (attempt < 5) {
+                makeDue(jobId);
+            }
+        }
+
+        OutboundJob failed = outboundJobRepository.findById(jobId).orElseThrow();
+        assertThat(failed.getStatus()).isEqualTo(OutboundJobStatus.FAILED);
+        assertThat(failed.getAttemptCount()).isEqualTo(5);
+        assertThat(failed.getCompletedAt()).isNotNull();
+        assertThat(historyTypes(issueId)).contains(HistoryEventType.ESCALATION_NOTIFICATION_FAILED);
+    }
+
+    @Test
+    void succeedsAfterPreviousTransportFailure() {
+        when(externalEscalationClient.notifyEscalation(anyString(), anyLong()))
+                .thenThrow(new OutboundTransportException(OutboundConstants.SIMULATED_CONNECTION_REFUSED))
+                .thenReturn(SimulatedHttpResponse.success(true));
+        Long issueId = createIssue("Worker transport then success");
+        Long jobId = outboundNotificationService.enqueueEscalation(issueId).jobId();
+
+        outboundWorkerService.processDueJobs();
+        assertThat(outboundJobRepository.findById(jobId).orElseThrow().getStatus())
+                .isEqualTo(OutboundJobStatus.RETRY_SCHEDULED);
+
+        makeDue(jobId);
+        outboundWorkerService.processDueJobs();
+
+        OutboundJob succeeded = outboundJobRepository.findById(jobId).orElseThrow();
+        assertThat(succeeded.getStatus()).isEqualTo(OutboundJobStatus.SUCCEEDED);
+        assertThat(succeeded.getAttemptCount()).isEqualTo(2);
+        assertThat(succeeded.getCompletedAt()).isNotNull();
+        assertThat(historyTypes(issueId)).contains(HistoryEventType.ESCALATION_NOTIFICATION_SUCCEEDED);
     }
 
     @Test
