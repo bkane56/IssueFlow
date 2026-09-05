@@ -180,7 +180,7 @@ SQLite is created at `backend/data/issueflow.db` on first start. Seed data loads
 
 ### 2. React frontend service
 
-Requires Node.js 18+.
+Requires Node.js 22+.
 
 ```bash
 cd frontend
