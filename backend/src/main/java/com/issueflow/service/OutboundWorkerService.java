@@ -9,7 +9,7 @@ import com.issueflow.entity.Issue;
 import com.issueflow.entity.IssueHistory;
 import com.issueflow.entity.OutboundJob;
 import com.issueflow.entity.OutboundJobStatus;
-import com.issueflow.exception.OutboundTimeoutException;
+import com.issueflow.exception.OutboundTransportException;
 import com.issueflow.logging.OperationalLog;
 import com.issueflow.repository.IssueRepository;
 import com.issueflow.repository.OutboundJobRepository;
@@ -114,9 +114,9 @@ public class OutboundWorkerService {
             timeoutOrNetworkFailure = response.timeoutOrNetworkFailure();
             errorMessage = response.errorMessage();
             retryAfterSeconds = response.retryAfterSeconds();
-        } catch (OutboundTimeoutException exception) {
+        } catch (OutboundTransportException exception) {
             timeoutOrNetworkFailure = true;
-            errorMessage = OutboundConstants.SIMULATED_TIMEOUT;
+            errorMessage = exception.getMessage();
         }
         long durationMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
         Integer completedHttpStatus = httpStatus;

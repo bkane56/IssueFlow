@@ -316,8 +316,10 @@ The worker claims a due job, calls the simulator outside the database transactio
 ### Failure classes
 
 - Validation failure: the request never creates outbound work. Closed issues are rejected. Missing issues return 404.
-- Retryable outbound failure: timeout, HTTP 408, 429, 500, 502, 503, or 504. The job is scheduled again with bounded backoff.
+- Retryable outbound failure: timeout, other transient transport failures (connection refused, connection timeout, read timeout, socket reset, DNS failure, unreachable host), HTTP 408, 429, 500, 502, 503, or 504. The job is scheduled again with bounded backoff.
 - Permanent outbound failure: HTTP 400, 401, 403, 404, 409, 422, other non-retryable 4xx, or retry exhaustion. The job moves to `FAILED`.
+
+The worker classifies application-level outbound exceptions. `OutboundTransportException` and `OutboundTimeoutException` are retryable. HTTP-library exceptions stay inside the external client adapter and are translated there.
 
 ### Idempotency
 
@@ -333,6 +335,7 @@ Default maximum: 5 attempts. Attempt 1 runs as soon as the worker sees the job. 
 
 | Failure | Retry? | Behavior |
 |---|---|---|
+| Transient transport failure | Yes | Retry with bounded backoff |
 | Network timeout | Yes | Retry with bounded backoff |
 | HTTP 408 | Yes | Retry with bounded backoff |
 | HTTP 429 | Yes | Honor `Retry-After` when provided, capped at 120 seconds |
@@ -348,7 +351,17 @@ HTTP 409 is treated as a permanent remote conflict for this demo. Repeated calls
 
 ### Restart durability
 
-Retry state lives in SQLite, not in memory. If the backend stops after a retry is scheduled, the job is still in `outbound_jobs` and becomes eligible after the process starts again. Simulator in-memory attempt counters reset on restart. The durable truth is the job row.
+Retry state lives in SQLite, not in memory. Status, attempt count, next attempt time, last error, and idempotency key are columns on `outbound_jobs`.
+
+If the backend stops after a retry is scheduled:
+
+1. The job fails with a retryable condition and the worker writes that state to SQLite.
+2. The application can stop. The `outbound_jobs` row remains.
+3. The application starts again and does not recreate the job.
+4. The worker queries due jobs from the database.
+5. Processing resumes using the persisted attempt metadata.
+
+The simulated client keeps process-local attempt counters for modes such as `FAIL_ONCE_THEN_SUCCEED`. Those counters reset when the process exits, so that mode will fail again after a restart instead of succeeding. Use `ALWAYS_503` or `ALWAYS_TIMEOUT` for the restart demonstration. Those modes do not depend on in-memory attempt counts. The durable truth is the job row.
 
 ### History and UI
 
@@ -375,7 +388,9 @@ Default simulation mode is `FAIL_ONCE_THEN_SUCCEED`. Use an open issue on the Is
 4. Retry exhaustion: set `ISSUEFLOW_OUTBOUND_SIMULATION_MODE=ALWAYS_503`, restart, and trigger. After 5 attempts the job is `FAILED`.
 5. Stable idempotency: trigger the same issue twice. The second request returns the same `jobId` and key. No second logical job is created.
 6. History and UI: queued, failed attempt, retry scheduled, and succeeded or failed events appear on the Issue Detail timeline and outbound panel.
-7. Restart durability: trigger with the default fail-once mode, wait until the job is `RETRY_SCHEDULED`, stop the backend, start it again, and wait for the worker to complete the next attempt.
+7. Restart durability: set `ISSUEFLOW_OUTBOUND_SIMULATION_MODE=ALWAYS_503`, restart the backend, and trigger on an open issue. Wait until the job is `RETRY_SCHEDULED` with attempt count 1, a next attempt time, last HTTP 503, and last error stored. Stop the backend. The job row remains in SQLite. Start the backend again. After `nextAttemptAt`, the worker claims the persisted job and continues from the stored attempt metadata. The simulator still returns HTTP 503 because `ALWAYS_503` does not use process-local counters. The attempt count becomes 2 and another retry is scheduled.
+
+Do not use `FAIL_ONCE_THEN_SUCCEED` to demonstrate restart. That mode counts attempts in memory, so a restarted process treats the next call as attempt 1 and fails again instead of succeeding.
 
 Do not wait on automated tests for real backoff intervals. Tests invoke the worker directly.
 
@@ -425,7 +440,7 @@ Outbound notification:
 | `outbound.job.succeeded` | `httpStatus`, `durationMs`, `attemptCount` |
 | `outbound.job.reclaimed` | stale `PROCESSING` jobs returned to the queue |
 
-`failureClass` is one of `TIMEOUT`, `HTTP_429`, `HTTP_5XX`, `HTTP_4XX`, or `HTTP_OTHER`.
+`failureClass` is one of `TIMEOUT`, `HTTP_429`, `HTTP_5XX`, `HTTP_4XX`, or `HTTP_OTHER`. `TIMEOUT` covers timeouts and other recognized transient transport failures.
 
 Logs never include issue titles, descriptions, request bodies, or assignee names.
 
